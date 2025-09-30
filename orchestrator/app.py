@@ -129,7 +129,7 @@ async def handle_tiingo_daily_prices(
             status="ok" if result.get("status") == "success" else "error",
             data=result,
             job=request.job,
-            message=f"Tiingo daily prices job completed"
+            message="Tiingo daily prices job completed"
         )
     except Exception as e:
         logger.error(f"Tiingo daily prices job failed: {e}")

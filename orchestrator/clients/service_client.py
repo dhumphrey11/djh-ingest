@@ -74,9 +74,6 @@ class ServiceClient:
             if self._credentials is None:
                 self._credentials, project = google.auth.default()
 
-            # Create a request object for getting the ID token
-            auth_req = google.auth.transport.requests.Request()
-
             # Use metadata service approach for all credential types in Cloud Run
             # This is the most reliable approach for getting ID tokens
             try:
