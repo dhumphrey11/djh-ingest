@@ -1,0 +1,14 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+  - 'build'
+  - '-f'
+  - 'orchestrator/Dockerfile'
+  - '-t'
+  - 'gcr.io/$PROJECT_ID/orchestrator-service:$BUILD_ID'
+  - '-t' 
+  - 'gcr.io/$PROJECT_ID/orchestrator-service:latest'
+  - '.'
+images:
+- 'gcr.io/$PROJECT_ID/orchestrator-service:$BUILD_ID'
+- 'gcr.io/$PROJECT_ID/orchestrator-service:latest'
