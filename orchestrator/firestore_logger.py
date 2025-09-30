@@ -329,36 +329,35 @@ class FirestoreLogger:
     async def get_watchlist_symbols(self) -> List[str]:
         """
         Get the complete watchlist from Firestore
+        Reads all root-level documents from react_universeSymbols collection
 
         Returns:
             List of ticker symbols
         """
         try:
-            doc_ref = self.client.document("react_universeSymbols/config")
-            doc = await doc_ref.get()
-
-            if not doc.exists:
-                logger.warning("Universe symbols config not found")
-                return []
-
-            data = doc.to_dict()
-            if not data:
-                logger.warning("Universe symbols config document is empty")
-                return []
-            symbols = data.get("symbols", [])
-
-            # Extract ticker symbols
+            # Get all documents from the react_universeSymbols collection
+            collection_ref = self.client.collection("react_universeSymbols")
+            
             tickers = []
-            for symbol in symbols:
-                if isinstance(symbol, dict) and "ticker" in symbol:
-                    ticker = symbol["ticker"]
-                    # Only include active symbols
-                    if symbol.get("active", True):
-                        tickers.append(ticker)
-                elif isinstance(symbol, str):
-                    tickers.append(symbol)
+            async for doc in collection_ref.stream():
+                doc_data = doc.to_dict()
+                if not doc_data:
+                    continue
+                    
+                # Extract ticker symbol
+                ticker = doc_data.get("symbol")
+                if not ticker:
+                    # Fallback to ticker field or document ID
+                    ticker = doc_data.get("ticker") or doc.id
+                
+                # Only include active symbols (default to True if field missing)
+                is_active = doc_data.get("isActive", True)
+                if is_active and ticker:
+                    tickers.append(ticker)
 
-            logger.info(f"Retrieved {len(tickers)} symbols from watchlist")
+            # Sort for consistency
+            tickers.sort()
+            logger.info(f"Retrieved {len(tickers)} active symbols from watchlist")
             return tickers
 
         except Exception as e:
@@ -367,35 +366,36 @@ class FirestoreLogger:
 
     async def get_active_symbols(self) -> List[str]:
         """
-        Get currently active positions from Firestore
+        Get currently active portfolio positions from Firestore
+        Reads all root-level documents from react_activeSymbols collection
 
         Returns:
             List of active ticker symbols
         """
         try:
-            doc_ref = self.client.document("react_activeSymbols/positions")
-            doc = await doc_ref.get()
-
-            if not doc.exists:
-                logger.warning("Active symbols config not found")
-                return []
-
-            data = doc.to_dict()
-            if not data:
-                logger.warning("Active symbols positions document is empty")
-                return []
-            positions = data.get("positions", [])
-
-            # Extract ticker symbols from positions
+            # Get all documents from the react_activeSymbols collection
+            collection_ref = self.client.collection("react_activeSymbols")
+            
             tickers = []
-            for position in positions:
-                if isinstance(position, dict) and "ticker" in position:
-                    ticker = position["ticker"]
-                    # Only include positions with quantity > 0
-                    if position.get("quantity", 0) > 0:
-                        tickers.append(ticker)
+            async for doc in collection_ref.stream():
+                doc_data = doc.to_dict()
+                if not doc_data:
+                    continue
+                
+                # Extract ticker symbol
+                symbol = doc_data.get("symbol")
+                if not symbol:
+                    # Fallback to document ID if no symbol field
+                    symbol = doc.id
+                
+                # Only include active symbols (default to True if field missing)
+                is_active = doc_data.get("isActive", True)
+                if is_active and symbol:
+                    tickers.append(symbol)
 
-            logger.info(f"Retrieved {len(tickers)} active symbols")
+            # Sort for consistency
+            tickers.sort()
+            logger.info(f"Retrieved {len(tickers)} active portfolio symbols")
             return tickers
 
         except Exception as e:
@@ -405,33 +405,40 @@ class FirestoreLogger:
     async def get_index_symbols(self) -> List[str]:
         """
         Get market index symbols from Firestore
+        Currently returns default indices as no separate index collection exists
 
         Returns:
             List of index symbols
         """
         try:
-            doc_ref = self.client.document("react_universeSymbols/config")
-            doc = await doc_ref.get()
+            # Check if there's a separate indices collection or documents with index indicators
+            collection_ref = self.client.collection("react_universeSymbols")
+            
+            indices = []
+            async for doc in collection_ref.stream():
+                doc_data = doc.to_dict()
+                if not doc_data:
+                    continue
+                
+                symbol = doc_data.get("symbol")
+                if symbol:
+                    # Check if this is an index-like symbol (ETFs, etc.)
+                    # Common index symbols: SPY, QQQ, IWM, DIA, VTI, etc.
+                    if symbol in ["SPY", "QQQ", "IWM", "DIA", "VTI", "VEA", "VWO", "BND"]:
+                        indices.append(symbol)
+                    # Or check if sector indicates it's an index/ETF
+                    elif doc_data.get("sector") == "Index" or doc_data.get("industry") == "Index":
+                        indices.append(symbol)
 
-            if not doc.exists:
-                return ["SPY", "QQQ", "IWM", "DIA"]  # Default indices
-
-            data = doc.to_dict()
-            if not data:
-                logger.warning("Universe symbols config document is empty for indices")
-                return ["SPY", "QQQ", "IWM", "DIA"]  # Default fallback
-            indices = data.get("indices", [])
-
-            # Extract index symbols
-            symbols = []
-            for index in indices:
-                if isinstance(index, dict) and "symbol" in index:
-                    symbols.append(index["symbol"])
-                elif isinstance(index, str):
-                    symbols.append(index)
-
-            logger.info(f"Retrieved {len(symbols)} index symbols")
-            return symbols
+            if indices:
+                indices.sort()
+                logger.info(f"Retrieved {len(indices)} index symbols from watchlist")
+                return indices
+            
+            # Default fallback if no indices found in watchlist
+            default_indices = ["SPY", "QQQ", "IWM", "DIA"]
+            logger.info(f"No indices found in watchlist, using defaults: {default_indices}")
+            return default_indices
 
         except Exception as e:
             logger.error(f"Failed to get index symbols: {e}")
