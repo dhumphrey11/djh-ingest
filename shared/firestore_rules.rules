@@ -1,0 +1,299 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===========================================
+    // AUTHENTICATION REQUIREMENTS
+    // ===========================================
+    // All reads require authentication
+    // All writes require service account authentication
+    // Raw ingestion logs require admin permissions for reads
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if request is from authorized service account
+    function isAuthorizedServiceAccount() {
+      return request.auth != null && 
+             request.auth.token.email in [
+               "ingest-sa@<PROJECT>.iam.gserviceaccount.com",
+               "orchestrator-sa@<PROJECT>.iam.gserviceaccount.com",
+               "scheduler-invoker@<PROJECT>.iam.gserviceaccount.com"
+             ];
+    }
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth != null && 
+             request.auth.token.admin == true;
+    }
+    
+    // Helper function to check if user has specific role
+    function hasRole(role) {
+      return request.auth != null && 
+             request.auth.token.roles != null &&
+             role in request.auth.token.roles;
+    }
+    
+    // ===========================================
+    // RAW INGESTION LOGS - RESTRICTED ACCESS
+    // ===========================================
+    // Only service accounts can write
+    // Only admins can read (sensitive data, API responses)
+    match /raw_ingestion_logs/{document=**} {
+      allow read: if isAdmin();
+      allow write: if isAuthorizedServiceAccount();
+    }
+    
+    // ===========================================
+    // CONFIGURATION COLLECTIONS
+    // ===========================================
+    // Universe symbols and active positions
+    // Read: Any authenticated user
+    // Write: Admins and service accounts only
+    match /react_universeSymbols/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isAuthorizedServiceAccount();
+    }
+    
+    match /react_activeSymbols/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isAuthorizedServiceAccount();
+    }
+    
+    // ===========================================
+    // PRICE DATA COLLECTIONS
+    // ===========================================
+    // Read: Any authenticated user (portfolio tracking, analysis)
+    // Write: Service accounts only (ingestion pipeline)
+    match /prices_daily/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthorizedServiceAccount();
+    }
+    
+    match /prices_intraday/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthorizedServiceAccount();
+    }
+    
+    // ===========================================
+    // FUNDAMENTAL DATA COLLECTIONS  
+    // ===========================================
+    // Read: Any authenticated user
+    // Write: Service accounts only
+    match /fundamentals/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthorizedServiceAccount();
+    }
+    
+    match /earnings_calendar/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthorizedServiceAccount();
+    }
+    
+    match /analyst_ratings/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthorizedServiceAccount();
+    }
+    
+    // ===========================================
+    // TECHNICAL ANALYSIS COLLECTIONS
+    // ===========================================
+    // Read: Any authenticated user
+    // Write: Service accounts only
+    match /technical_indicators/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthorizedServiceAccount();
+    }
+    
+    // ===========================================
+    // NEWS AND MARKET DATA COLLECTIONS
+    // ===========================================
+    // Read: Any authenticated user
+    // Write: Service accounts only
+    match /news_articles/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthorizedServiceAccount();
+    }
+    
+    match /insider_transactions/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthorizedServiceAccount();
+    }
+    
+    // ===========================================
+    // MARKET INDICES AND ECONOMIC DATA
+    // ===========================================
+    // Read: Any authenticated user
+    // Write: Service accounts only
+    match /market_indices/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthorizedServiceAccount();
+    }
+    
+    match /economic_indicators/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthorizedServiceAccount();
+    }
+    
+    // ===========================================
+    // USER-SPECIFIC COLLECTIONS (FUTURE)
+    // ===========================================
+    // Personal watchlists, alerts, preferences
+    // Read/Write: Owner only
+    match /users/{userId}/watchlists/{document=**} {
+      allow read, write: if isAuthenticated() && 
+                           request.auth.uid == userId;
+    }
+    
+    match /users/{userId}/alerts/{document=**} {
+      allow read, write: if isAuthenticated() && 
+                           request.auth.uid == userId;
+    }
+    
+    match /users/{userId}/preferences/{document=**} {
+      allow read, write: if isAuthenticated() && 
+                           request.auth.uid == userId;
+    }
+    
+    // ===========================================
+    // SYSTEM COLLECTIONS
+    // ===========================================
+    // System logs, health checks, etc.
+    // Read: Admins and monitoring systems
+    // Write: Service accounts
+    match /system_logs/{document=**} {
+      allow read: if isAdmin() || hasRole("monitoring");
+      allow write: if isAuthorizedServiceAccount();
+    }
+    
+    match /health_checks/{document=**} {
+      allow read: if isAdmin() || hasRole("monitoring");
+      allow write: if isAuthorizedServiceAccount();
+    }
+    
+    // ===========================================
+    // API QUOTAS AND RATE LIMITING
+    // ===========================================
+    // Track API usage, rate limits, etc.
+    // Read/Write: Service accounts only
+    match /api_quotas/{document=**} {
+      allow read, write: if isAuthorizedServiceAccount();
+    }
+    
+    match /rate_limits/{document=**} {
+      allow read, write: if isAuthorizedServiceAccount();
+    }
+    
+    // ===========================================
+    // FALLBACK RULE - DENY ALL
+    // ===========================================
+    // Explicitly deny access to any unmatched paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+/*
+SETUP INSTRUCTIONS:
+
+1. Replace <PROJECT> with your actual GCP project ID throughout this file:
+   - ingest-sa@<PROJECT>.iam.gserviceaccount.com
+   - orchestrator-sa@<PROJECT>.iam.gserviceaccount.com  
+   - scheduler-invoker@<PROJECT>.iam.gserviceaccount.com
+
+2. Deploy these rules to Firestore:
+   ```bash
+   gcloud firestore deploy firestore_rules.rules --project=<PROJECT>
+   ```
+
+3. Create service accounts with proper IAM roles:
+   ```bash
+   # Create service accounts
+   gcloud iam service-accounts create ingest-sa \
+     --display-name="Data Ingestion Service Account" \
+     --project=<PROJECT>
+   
+   gcloud iam service-accounts create orchestrator-sa \
+     --display-name="Orchestrator Service Account" \
+     --project=<PROJECT>
+   
+   gcloud iam service-accounts create scheduler-invoker \
+     --display-name="Cloud Scheduler Invoker" \
+     --project=<PROJECT>
+   
+   # Grant Firestore access
+   gcloud projects add-iam-policy-binding <PROJECT> \
+     --member="serviceAccount:ingest-sa@<PROJECT>.iam.gserviceaccount.com" \
+     --role="roles/datastore.user"
+   
+   gcloud projects add-iam-policy-binding <PROJECT> \
+     --member="serviceAccount:orchestrator-sa@<PROJECT>.iam.gserviceaccount.com" \
+     --role="roles/datastore.user"
+   ```
+
+4. Configure authentication for your applications:
+   - For Cloud Run: Set the service account in deployment
+   - For local development: Use Application Default Credentials
+   - For admin access: Set custom claims in Firebase Auth
+
+5. Set up user authentication:
+   - Enable Firebase Authentication in console
+   - Configure sign-in methods (Google, email/password, etc.)
+   - Set custom claims for admin users:
+     ```javascript
+     admin.auth().setCustomUserClaims(uid, { admin: true });
+     ```
+
+6. Monitor access with audit logs:
+   ```bash
+   gcloud logging read 'protoPayload.serviceName="firestore.googleapis.com"' \
+     --project=<PROJECT> \
+     --format="table(timestamp, protoPayload.authenticationInfo.principalEmail, protoPayload.resourceName)"
+   ```
+
+SECURITY CONSIDERATIONS:
+
+- Service account emails are validated at the Firestore rules level
+- Raw ingestion logs contain sensitive API responses - admin access only
+- All collections require authentication for reads
+- Only service accounts can write data (prevents data corruption)
+- User-specific collections follow principle of least privilege
+- Fallback rule explicitly denies access to unmatched paths
+
+TESTING SECURITY RULES:
+
+Use Firebase Security Rules Playground or write unit tests:
+```javascript
+// Example test
+const testEnv = require('@firebase/rules-unit-testing');
+const fs = require('fs');
+
+const rules = fs.readFileSync('firestore_rules.rules', 'utf8');
+
+// Test authenticated read access
+const authenticatedDb = testEnv
+  .initializeTestApp({ projectId: 'test-project', auth: { uid: 'user1' } })
+  .firestore();
+
+// Test service account write access  
+const serviceAccountDb = testEnv
+  .initializeTestApp({ 
+    projectId: 'test-project', 
+    auth: { email: 'ingest-sa@test-project.iam.gserviceaccount.com' } 
+  })
+  .firestore();
+```
+
+MONITORING AND ALERTING:
+
+Set up monitoring for:
+- Failed authentication attempts
+- Unusual access patterns
+- Service account key rotations
+- Rule deployment changes
+
+*/

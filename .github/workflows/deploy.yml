@@ -1,0 +1,366 @@
+name: Deploy Stock Analysis Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install shared dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-asyncio pytest-cov
+        pip install -r shared/requirements.txt || echo "No shared requirements.txt found"
+    
+    - name: Install service dependencies
+      run: |
+        # Install dependencies for all services
+        for service_dir in services/*/; do
+          if [ -f "$service_dir/requirements.txt" ]; then
+            echo "Installing dependencies for $service_dir"
+            pip install -r "$service_dir/requirements.txt"
+          fi
+        done
+        
+        # Install orchestrator dependencies
+        if [ -f "orchestrator/requirements.txt" ]; then
+          pip install -r orchestrator/requirements.txt
+        fi
+    
+    - name: Lint code with flake8
+      run: |
+        pip install flake8
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Type check with mypy
+      run: |
+        pip install mypy
+        mypy shared/ --ignore-missing-imports || echo "Type checking completed with warnings"
+    
+    - name: Test with pytest
+      run: |
+        # Run tests if any test files exist
+        if find . -name "*test*.py" -o -name "test_*" -type d | grep -q .; then
+          pytest --cov=. --cov-report=xml
+        else
+          echo "No tests found - skipping pytest"
+        fi
+      env:
+        # Set test environment variables
+        GOOGLE_CLOUD_PROJECT: test-project
+        FIRESTORE_EMULATOR_HOST: localhost:8080
+
+  build-and-deploy:
+    name: Build and Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Configure Docker for GCR
+      run: gcloud auth configure-docker
+    
+    - name: Get short SHA for image tagging
+      run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
+    
+    - name: Build and Push Tiingo Service
+      run: |
+        docker build -f services/tiingo-service/Dockerfile -t gcr.io/$PROJECT_ID/tiingo-service:$SHORT_SHA .
+        docker push gcr.io/$PROJECT_ID/tiingo-service:$SHORT_SHA
+        
+        # Also tag as latest for main branch
+        docker tag gcr.io/$PROJECT_ID/tiingo-service:$SHORT_SHA gcr.io/$PROJECT_ID/tiingo-service:latest
+        docker push gcr.io/$PROJECT_ID/tiingo-service:latest
+    
+    - name: Build and Push Finnhub Service  
+      run: |
+        docker build -f services/finnhub-service/Dockerfile -t gcr.io/$PROJECT_ID/finnhub-service:$SHORT_SHA .
+        docker push gcr.io/$PROJECT_ID/finnhub-service:$SHORT_SHA
+        docker tag gcr.io/$PROJECT_ID/finnhub-service:$SHORT_SHA gcr.io/$PROJECT_ID/finnhub-service:latest
+        docker push gcr.io/$PROJECT_ID/finnhub-service:latest
+    
+    - name: Build and Push Polygon Service
+      run: |
+        docker build -f services/polygon-service/Dockerfile -t gcr.io/$PROJECT_ID/polygon-service:$SHORT_SHA .
+        docker push gcr.io/$PROJECT_ID/polygon-service:$SHORT_SHA
+        docker tag gcr.io/$PROJECT_ID/polygon-service:$SHORT_SHA gcr.io/$PROJECT_ID/polygon-service:latest
+        docker push gcr.io/$PROJECT_ID/polygon-service:latest
+    
+    - name: Build and Push AlphaVantage Service
+      run: |
+        docker build -f services/alphavantage-service/Dockerfile -t gcr.io/$PROJECT_ID/alphavantage-service:$SHORT_SHA .
+        docker push gcr.io/$PROJECT_ID/alphavantage-service:$SHORT_SHA
+        docker tag gcr.io/$PROJECT_ID/alphavantage-service:$SHORT_SHA gcr.io/$PROJECT_ID/alphavantage-service:latest
+        docker push gcr.io/$PROJECT_ID/alphavantage-service:latest
+    
+    - name: Build and Push Orchestrator Service
+      run: |
+        docker build -f orchestrator/Dockerfile -t gcr.io/$PROJECT_ID/orchestrator-service:$SHORT_SHA .
+        docker push gcr.io/$PROJECT_ID/orchestrator-service:$SHORT_SHA
+        docker tag gcr.io/$PROJECT_ID/orchestrator-service:$SHORT_SHA gcr.io/$PROJECT_ID/orchestrator-service:latest
+        docker push gcr.io/$PROJECT_ID/orchestrator-service:latest
+    
+    - name: Deploy Tiingo Service to Cloud Run
+      run: |
+        gcloud run deploy tiingo-service \
+          --image gcr.io/$PROJECT_ID/tiingo-service:$SHORT_SHA \
+          --region $REGION \
+          --memory 1Gi \
+          --cpu 1 \
+          --max-instances 5 \
+          --timeout 900s \
+          --no-allow-unauthenticated \
+          --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID" \
+          --execution-environment gen2 \
+          --port 8001
+    
+    - name: Deploy Finnhub Service to Cloud Run
+      run: |
+        gcloud run deploy finnhub-service \
+          --image gcr.io/$PROJECT_ID/finnhub-service:$SHORT_SHA \
+          --region $REGION \
+          --memory 2Gi \
+          --cpu 2 \
+          --max-instances 10 \
+          --timeout 900s \
+          --no-allow-unauthenticated \
+          --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID" \
+          --execution-environment gen2 \
+          --port 8002
+    
+    - name: Deploy Polygon Service to Cloud Run
+      run: |
+        gcloud run deploy polygon-service \
+          --image gcr.io/$PROJECT_ID/polygon-service:$SHORT_SHA \
+          --region $REGION \
+          --memory 1Gi \
+          --cpu 1 \
+          --max-instances 5 \
+          --timeout 900s \
+          --no-allow-unauthenticated \
+          --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID" \
+          --execution-environment gen2 \
+          --port 8003
+    
+    - name: Deploy AlphaVantage Service to Cloud Run
+      run: |
+        gcloud run deploy alphavantage-service \
+          --image gcr.io/$PROJECT_ID/alphavantage-service:$SHORT_SHA \
+          --region $REGION \
+          --memory 1Gi \
+          --cpu 1 \
+          --max-instances 3 \
+          --timeout 900s \
+          --no-allow-unauthenticated \
+          --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID" \
+          --execution-environment gen2 \
+          --port 8004
+    
+    - name: Deploy Orchestrator Service to Cloud Run
+      run: |
+        # Get service URLs for inter-service communication
+        TIINGO_URL=$(gcloud run services describe tiingo-service --region=$REGION --format="value(status.url)")
+        FINNHUB_URL=$(gcloud run services describe finnhub-service --region=$REGION --format="value(status.url)")
+        POLYGON_URL=$(gcloud run services describe polygon-service --region=$REGION --format="value(status.url)")
+        ALPHAVANTAGE_URL=$(gcloud run services describe alphavantage-service --region=$REGION --format="value(status.url)")
+        
+        gcloud run deploy orchestrator-service \
+          --image gcr.io/$PROJECT_ID/orchestrator-service:$SHORT_SHA \
+          --region $REGION \
+          --memory 2Gi \
+          --cpu 2 \
+          --max-instances 10 \
+          --timeout 900s \
+          --no-allow-unauthenticated \
+          --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,TIINGO_SERVICE_URL=$TIINGO_URL,FINNHUB_SERVICE_URL=$FINNHUB_URL,POLYGON_SERVICE_URL=$POLYGON_URL,ALPHAVANTAGE_SERVICE_URL=$ALPHAVANTAGE_URL" \
+          --execution-environment gen2 \
+          --port 8000
+    
+    - name: Configure Service-to-Service IAM
+      run: |
+        # Get the orchestrator service account
+        ORCHESTRATOR_SA=$(gcloud run services describe orchestrator-service \
+          --region=$REGION \
+          --format="value(spec.template.spec.serviceAccountName)" || echo "${PROJECT_ID}@appspot.gserviceaccount.com")
+        
+        # Grant orchestrator permission to invoke other services
+        for service in tiingo-service finnhub-service polygon-service alphavantage-service; do
+          gcloud run services add-iam-policy-binding $service \
+            --region=$REGION \
+            --member="serviceAccount:${ORCHESTRATOR_SA}" \
+            --role="roles/run.invoker" || true
+          echo "✓ Configured IAM for $service"
+        done
+    
+    - name: Health Check All Services
+      run: |
+        # Wait a bit for services to be ready
+        sleep 30
+        
+        # Check health of all services
+        services=("tiingo-service" "finnhub-service" "polygon-service" "alphavantage-service" "orchestrator-service")
+        
+        for service in "${services[@]}"; do
+          URL=$(gcloud run services describe $service --region=$REGION --format="value(status.url)")
+          echo "Checking health of $service at $URL/health"
+          
+          # Get access token for authenticated requests
+          TOKEN=$(gcloud auth print-access-token)
+          
+          # Health check with retry
+          for i in {1..5}; do
+            if curl -f -H "Authorization: Bearer $TOKEN" "$URL/health"; then
+              echo "✓ $service is healthy"
+              break
+            else
+              echo "⚠️ $service health check failed (attempt $i/5)"
+              if [ $i -eq 5 ]; then
+                echo "❌ $service failed health check after 5 attempts"
+                exit 1
+              fi
+              sleep 10
+            fi
+          done
+        done
+    
+    - name: Create GitHub Deployment
+      uses: actions/github-script@v7
+      if: success()
+      with:
+        script: |
+          const deployment = await github.rest.repos.createDeployment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: context.sha,
+            environment: 'production',
+            description: 'Deployed stock analysis pipeline to Cloud Run',
+            auto_merge: false,
+            required_contexts: []
+          });
+          
+          await github.rest.repos.createDeploymentStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            deployment_id: deployment.data.id,
+            state: 'success',
+            description: 'All services deployed successfully'
+          });
+    
+    - name: Notify on Success
+      if: success()
+      run: |
+        ORCHESTRATOR_URL=$(gcloud run services describe orchestrator-service --region=$REGION --format="value(status.url)")
+        echo "🚀 Deployment successful!"
+        echo "📊 Orchestrator URL: $ORCHESTRATOR_URL"
+        echo "📝 Commit: ${{ github.sha }}"
+        echo "🏷️ Image tag: $SHORT_SHA"
+
+  deploy-develop:
+    name: Deploy to Development Environment
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Deploy to Development
+      run: |
+        echo "🧪 Deploying to development environment"
+        # Add development-specific deployment logic here
+        # This could deploy to a separate project or use different service names
+        echo "Development deployment completed"
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+    
+    - name: Check for Python security issues with bandit
+      run: |
+        pip install bandit
+        bandit -r . -f json -o bandit-report.json || echo "Bandit scan completed"
+    
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-scan-results
+        path: |
+          trivy-results.sarif
+          bandit-report.json

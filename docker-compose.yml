@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # Firestore emulator for local development
+  firestore-emulator:
+    image: gcr.io/google.com/cloudsdktool/cloud-sdk:latest
+    command: 
+      - /bin/bash
+      - -c
+      - |
+        gcloud components install cloud-firestore-emulator --quiet
+        gcloud beta emulators firestore start --host-port=0.0.0.0:8080
+    ports:
+      - "8080:8080"
+    environment:
+      - CLOUDSDK_CORE_PROJECT=djh-app-3bdc2
+
+  # Tiingo Service
+  tiingo-service:
+    build:
+      context: .
+      dockerfile: ./services/tiingo-service/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - GOOGLE_CLOUD_PROJECT=djh-app-3bdc2
+      - FIRESTORE_EMULATOR_HOST=firestore-emulator:8080
+    depends_on:
+      - firestore-emulator
+
+  # Finnhub Service  
+  finnhub-service:
+    build:
+      context: .
+      dockerfile: ./services/finnhub-service/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - GOOGLE_CLOUD_PROJECT=djh-app-3bdc2
+      - FIRESTORE_EMULATOR_HOST=firestore-emulator:8080
+    depends_on:
+      - firestore-emulator
+
+  # Polygon Service
+  polygon-service:
+    build:
+      context: .
+      dockerfile: ./services/polygon-service/Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - GOOGLE_CLOUD_PROJECT=djh-app-3bdc2
+      - FIRESTORE_EMULATOR_HOST=firestore-emulator:8080
+    depends_on:
+      - firestore-emulator
+
+  # AlphaVantage Service
+  alphavantage-service:
+    build:
+      context: .
+      dockerfile: ./services/alphavantage-service/Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      - GOOGLE_CLOUD_PROJECT=djh-app-3bdc2
+      - FIRESTORE_EMULATOR_HOST=firestore-emulator:8080
+    depends_on:
+      - firestore-emulator
+
+  # Orchestrator Service
+  orchestrator-service:
+    build:
+      context: .
+      dockerfile: ./orchestrator/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_CLOUD_PROJECT=djh-app-3bdc2
+      - FIRESTORE_EMULATOR_HOST=firestore-emulator:8080
+      - TIINGO_SERVICE_URL=http://tiingo-service:8001
+      - FINNHUB_SERVICE_URL=http://finnhub-service:8002
+      - POLYGON_SERVICE_URL=http://polygon-service:8003
+      - ALPHAVANTAGE_SERVICE_URL=http://alphavantage-service:8004
+    depends_on:
+      - firestore-emulator
+      - tiingo-service
+      - finnhub-service
+      - polygon-service
+      - alphavantage-service
+
+networks:
+  default:
+    name: djh-ingest-network
