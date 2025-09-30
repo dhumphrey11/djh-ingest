@@ -273,7 +273,6 @@ async def get_metrics():
     Returns:
         Service performance metrics
     """
-    global tiingo_client
     
     if not tiingo_client:
         return {

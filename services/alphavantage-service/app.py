@@ -319,7 +319,6 @@ async def get_rate_limit_status(
 @app.get("/metrics")
 async def get_metrics():
     """Get service metrics"""
-    global alphavantage_client
     
     if not alphavantage_client:
         return {

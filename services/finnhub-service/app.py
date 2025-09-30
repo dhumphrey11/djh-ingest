@@ -437,7 +437,6 @@ async def get_market_news(
 @app.get("/metrics")
 async def get_metrics():
     """Get service metrics"""
-    global finnhub_client
     
     if not finnhub_client:
         return {

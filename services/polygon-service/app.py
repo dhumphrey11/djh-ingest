@@ -359,7 +359,6 @@ async def get_trending_tickers(
 @app.get("/metrics")
 async def get_metrics():
     """Get service metrics"""
-    global polygon_client
     
     if not polygon_client:
         return {
