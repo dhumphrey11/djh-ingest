@@ -6,10 +6,10 @@ import asyncio
 import random
 import time
 import logging
-from typing import Callable, Any, Optional, Type, Union, Tuple
+from typing import Callable, Any, Optional, Type, Tuple
 from functools import wraps
 import requests
-from requests.exceptions import RequestException, Timeout, ConnectionError
+from requests.exceptions import Timeout, ConnectionError
 
 
 logger = logging.getLogger(__name__)

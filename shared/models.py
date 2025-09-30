@@ -2,11 +2,10 @@
 Shared Pydantic models for the ingestion pipeline
 """
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime as dt
 from enum import Enum
-import json
 
 
 class ScopeType(str, Enum):

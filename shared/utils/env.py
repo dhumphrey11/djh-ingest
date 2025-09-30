@@ -4,7 +4,7 @@ Environment variable utilities
 
 import os
 import logging
-from typing import Optional, Dict, Any, List, overload
+from typing import Optional, Dict, overload
 from dataclasses import dataclass
 
 
@@ -181,7 +181,7 @@ def load_env_config() -> EnvConfig:
         # Validate configuration
         validate_config(config)
         
-        logger.info(f"Environment configuration loaded successfully")
+        logger.info("Environment configuration loaded successfully")
         logger.info(f"GCP Project: {config.gcp_project}")
         logger.info(f"GCP Region: {config.gcp_region}")
         logger.info(f"Dev Mode: {config.dev_mode}")

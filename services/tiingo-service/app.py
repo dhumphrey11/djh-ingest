@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from tiingo_client import TiingoClient, TiingoError
-from shared.models import ServiceRequest, ServiceResponse, ScopeType
+from shared.models import ServiceResponse, ScopeType
 from shared.utils.env import get_config, setup_logging, load_api_keys, validate_service_config
 
 

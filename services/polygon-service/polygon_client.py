@@ -7,7 +7,6 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
-from urllib.parse import quote
 
 import aiohttp
 from shared.utils.retries import retry_with_backoff, RateLimitError

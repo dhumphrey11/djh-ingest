@@ -6,7 +6,7 @@ Handles communication with AlphaVantage API for technical indicators with advanc
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional
 
 import aiohttp
 from shared.utils.retries import retry_with_backoff, RateLimitError

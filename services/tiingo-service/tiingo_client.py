@@ -6,10 +6,9 @@ Handles communication with Tiingo API for EOD daily prices
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional
 
 import aiohttp
-import pandas as pd
 from shared.utils.retries import retry_with_backoff, RateLimitError
 
 

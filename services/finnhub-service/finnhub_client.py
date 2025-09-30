@@ -341,7 +341,7 @@ class FinnhubClient:
                         "headline": article.get("headline", ""),
                         "summary": article.get("summary", ""),
                         "url": article.get("url", ""),
-                        "source": article.get("source", ""),
+                        "original_source": article.get("source", ""),
                         "category": article.get("category", "general"),
                         "datetime": int(article.get("datetime", 0)),
                         "image": article.get("image"),
@@ -401,7 +401,7 @@ class FinnhubClient:
             
             processed_data = {
                 "ticker": ticker,
-                "report_date": datetime.utcnow().strftime("%Y-Q%s" % ((datetime.utcnow().month - 1) // 3 + 1)),
+                "report_date": datetime.utcnow().strftime(f"%Y-Q{((datetime.utcnow().month - 1) // 3 + 1)}"),
                 "market_cap": metric_data.get("marketCapitalization"),
                 "shares_outstanding": metric_data.get("shareOutstanding"),
                 "pe_ratio": metric_data.get("peBasicExclExtraTTM"),
@@ -634,7 +634,7 @@ class FinnhubClient:
                         "headline": article.get("headline", ""),
                         "summary": article.get("summary", ""),
                         "url": article.get("url", ""),
-                        "source": article.get("source", ""),
+                        "original_source": article.get("source", ""),
                         "category": category,
                         "datetime": int(article.get("datetime", 0)),
                         "image": article.get("image"),
