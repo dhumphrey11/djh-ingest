@@ -58,6 +58,7 @@ def get_polygon_client() -> PolygonClient:
 
 
 @app.on_event("startup")
+
 async def startup_event():
     """Initialize service on startup"""
     logger.info("Starting Polygon service")
@@ -70,6 +71,7 @@ async def startup_event():
 
 
 @app.on_event("shutdown")
+
 async def shutdown_event():
     """Cleanup on shutdown"""
     logger.info("Shutting down Polygon service")
@@ -80,6 +82,7 @@ async def shutdown_event():
 
 
 @app.get("/health")
+
 async def health_check():
     """Health check endpoint"""
     try:
@@ -100,6 +103,7 @@ async def health_check():
 
 
 # Request models
+
 class FetchRequest(BaseModel):
     """Base request model for fetch endpoints"""
     tickers: List[str]
@@ -116,6 +120,7 @@ class NewsRequest(FetchRequest):
 
 # Route handlers
 @app.post("/fetch", response_model=ServiceResponse)
+
 async def fetch_company_news(
     request: NewsRequest,
     client: PolygonClient = Depends(get_polygon_client)
@@ -135,6 +140,7 @@ async def fetch_company_news(
 
 
 @app.post("/fetch/market", response_model=ServiceResponse)
+
 async def fetch_market_news(
     request: FetchRequest,
     client: PolygonClient = Depends(get_polygon_client)
@@ -153,13 +159,13 @@ async def _execute_fetch(fetch_func, request: FetchRequest, data_type: str):
     """Common execution pattern for fetch operations"""
     start_time = datetime.utcnow()
     logger.info(f"Processing {data_type} request for {len(request.tickers)} tickers, job_id: {request.job_id}")
-    
+
     try:
         results = await fetch_func(request.tickers)
-        
+
         # Calculate metrics
         duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
-        
+
         # For news, count successful articles rather than tickers
         if isinstance(results, list) and len(results) > 0 and isinstance(results[0], dict):
             if 'ticker' in results[0]:
@@ -176,15 +182,15 @@ async def _execute_fetch(fetch_func, request: FetchRequest, data_type: str):
             successful_count = 0
             failed_count = 0
             failed_items = []
-        
+
         logger.info(
             f"Completed {data_type} request - Success: {successful_count}, "
             f"Failed: {failed_count}, Duration: {duration_ms}ms"
         )
-        
+
         if failed_items:
             logger.warning(f"Failed items for {data_type}: {failed_items}")
-        
+
         return ServiceResponse(
             status="ok",
             fetched=successful_count,
@@ -192,7 +198,7 @@ async def _execute_fetch(fetch_func, request: FetchRequest, data_type: str):
             errors=[f"Failed: {item}" for item in failed_items] if failed_items else None,
             duration_ms=duration_ms
         )
-        
+
     except PolygonError as e:
         logger.error(f"Polygon API error: {e}")
         raise HTTPException(
@@ -209,6 +215,7 @@ async def _execute_fetch(fetch_func, request: FetchRequest, data_type: str):
 
 # Individual endpoints for testing/debugging
 @app.get("/ticker/{ticker}/news")
+
 async def get_ticker_news(
     ticker: str,
     published_date: Optional[str] = Query(None, description="Published date (YYYY-MM-DD)"),
@@ -222,27 +229,27 @@ async def get_ticker_news(
             published_date=published_date,
             limit=limit
         )
-        
+
         if not data or len(data) == 0:
             raise HTTPException(
                 status_code=404,
                 detail=f"No news data found for ticker {ticker}"
             )
-        
+
         ticker_data = data[0]
         if 'error' in ticker_data:
             raise HTTPException(
                 status_code=404,
                 detail=f"Error fetching news for {ticker}: {ticker_data['error']}"
             )
-        
+
         return {
             "status": "ok",
             "ticker": ticker.upper(),
             "data": ticker_data.get('data', []),
             "count": len(ticker_data.get('data', []))
         }
-        
+
     except HTTPException:
         raise
     except PolygonError as e:
@@ -260,6 +267,7 @@ async def get_ticker_news(
 
 
 @app.get("/market/news")
+
 async def get_market_news(
     published_date: Optional[str] = Query(None, description="Published date (YYYY-MM-DD)"),
     limit: Optional[int] = Query(10, description="Number of articles to return"),
@@ -271,13 +279,13 @@ async def get_market_news(
             published_date=published_date,
             limit=limit
         )
-        
+
         return {
             "status": "ok",
             "data": data,
             "count": len(data)
         }
-        
+
     except PolygonError as e:
         logger.error(f"Polygon API error for market news: {e}")
         raise HTTPException(
@@ -293,6 +301,7 @@ async def get_market_news(
 
 
 @app.get("/news/search")
+
 async def search_news(
     query: str = Query(..., description="Search query"),
     published_date: Optional[str] = Query(None, description="Published date (YYYY-MM-DD)"),
@@ -306,14 +315,14 @@ async def search_news(
             published_date=published_date,
             limit=limit
         )
-        
+
         return {
             "status": "ok",
             "query": query,
             "data": data,
             "count": len(data)
         }
-        
+
     except PolygonError as e:
         logger.error(f"Polygon API error for news search: {e}")
         raise HTTPException(
@@ -329,19 +338,20 @@ async def search_news(
 
 
 @app.get("/tickers/trending")
+
 async def get_trending_tickers(
     client: PolygonClient = Depends(get_polygon_client)
 ):
     """Get trending ticker symbols from news coverage"""
     try:
         data = await client.get_trending_tickers()
-        
+
         return {
             "status": "ok",
             "data": data,
             "count": len(data)
         }
-        
+
     except PolygonError as e:
         logger.error(f"Polygon API error for trending tickers: {e}")
         raise HTTPException(
@@ -357,15 +367,16 @@ async def get_trending_tickers(
 
 
 @app.get("/metrics")
+
 async def get_metrics():
     """Get service metrics"""
-    
+
     if not polygon_client:
         return {
             "status": "not_initialized",
             "client_stats": None
         }
-    
+
     return {
         "status": "ok",
         "client_stats": polygon_client.get_stats(),
@@ -376,7 +387,7 @@ async def get_metrics():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(
         "app:app",

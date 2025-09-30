@@ -28,9 +28,9 @@ class AlphaVantageClient:
     Async client for AlphaVantage API with advanced rate limiting and throttling
     Handles technical indicators with intelligent request batching
     """
-    
+
     BASE_URL = "https://www.alphavantage.co"
-    
+
     # Default indicators to fetch
     DEFAULT_INDICATORS = [
         "RSI",      # Relative Strength Index
@@ -41,17 +41,17 @@ class AlphaVantageClient:
         "STOCH",    # Stochastic Oscillator
         "ADX"       # Average Directional Index
     ]
-    
+
     def __init__(self, api_key: str):
         """
         Initialize AlphaVantage client
-        
+
         Args:
             api_key: AlphaVantage API key
         """
         if not api_key:
             raise ValueError("AlphaVantage API key is required")
-        
+
         self.api_key = api_key
         self.session: Optional[aiohttp.ClientSession] = None
         self.stats = {
@@ -63,20 +63,20 @@ class AlphaVantageClient:
             "last_request_time": None,
             "indicators_fetched": 0
         }
-        
+
         # Advanced rate limiting (AlphaVantage free tier: 5 calls/minute, 500 calls/day)
         self.rate_limit_requests_per_minute = 5
         self.rate_limit_requests_per_day = 500
         self.request_timestamps: List[datetime] = []
-        
+
         # Throttling state
         self.current_delay = 12.0  # Start with 12 seconds between requests
         self.max_delay = 60.0
         self.min_delay = 10.0
         self.adaptive_throttling = True
-        
+
         logger.info("AlphaVantage client initialized with adaptive throttling")
-    
+
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session"""
         if self.session is None or self.session.closed:
@@ -89,26 +89,26 @@ class AlphaVantageClient:
                 }
             )
         return self.session
-    
+
     async def close(self):
         """Close the aiohttp session"""
         if self.session and not self.session.closed:
             await self.session.close()
             self.session = None
-    
+
     def _check_rate_limit(self):
         """Advanced rate limiting check with daily limits"""
         now = datetime.utcnow()
-        
+
         # Clean old timestamps
         minute_cutoff = now - timedelta(minutes=1)
         day_cutoff = now - timedelta(days=1)
-        
+
         self.request_timestamps = [
-            ts for ts in self.request_timestamps 
+            ts for ts in self.request_timestamps
             if ts > day_cutoff
         ]
-        
+
         # Check per-minute limit
         recent_requests = [ts for ts in self.request_timestamps if ts > minute_cutoff]
         if len(recent_requests) >= self.rate_limit_requests_per_minute:
@@ -116,7 +116,7 @@ class AlphaVantageClient:
                 f"Per-minute rate limit ({self.rate_limit_requests_per_minute}) exceeded",
                 retry_after=60
             )
-        
+
         # Check daily limit
         if len(self.request_timestamps) >= self.rate_limit_requests_per_day:
             oldest_request = min(self.request_timestamps)
@@ -125,12 +125,12 @@ class AlphaVantageClient:
                 f"Daily rate limit ({self.rate_limit_requests_per_day}) exceeded",
                 retry_after=max(retry_after, 3600)
             )
-    
+
     def _adjust_throttling(self, success: bool, response_time_ms: int):
         """Adjust throttling based on response success and timing"""
         if not self.adaptive_throttling:
             return
-        
+
         if success:
             # Success - slightly reduce delay
             if response_time_ms < 2000:  # Fast response
@@ -140,19 +140,19 @@ class AlphaVantageClient:
         else:
             # Failure - increase delay significantly
             self.current_delay = min(self.max_delay, self.current_delay * 1.5)
-        
+
         logger.debug(f"Adjusted throttling delay to {self.current_delay:.2f}s")
-    
+
     @retry_with_backoff(max_retries=3, base_delay=5.0, max_delay=120.0)
     async def _make_request(
-        self, 
-        function: str, 
+        self,
+        function: str,
         symbol: str,
         params: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Make authenticated request to AlphaVantage API with advanced throttling"""
         self._check_rate_limit()
-        
+
         url = f"{self.BASE_URL}/query"
         request_params = params or {}
         request_params.update({
@@ -160,23 +160,23 @@ class AlphaVantageClient:
             "symbol": symbol,
             "apikey": self.api_key
         })
-        
+
         start_time = datetime.utcnow()
         self.stats["requests_made"] += 1
         self.stats["last_request_time"] = start_time.isoformat()
-        
+
         try:
             session = await self._get_session()
-            
+
             logger.debug(f"Making request to {url} for {function}/{symbol} with delay {self.current_delay:.2f}s")
-            
+
             async with session.get(url, params=request_params) as response:
                 duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
                 self.stats["total_duration_ms"] += duration_ms
-                
+
                 # Track request timestamp for rate limiting
                 self.request_timestamps.append(start_time)
-                
+
                 # Handle rate limiting
                 if response.status == 429:
                     self.stats["rate_limits_hit"] += 1
@@ -186,7 +186,7 @@ class AlphaVantageClient:
                         "AlphaVantage API rate limit exceeded",
                         retry_after=retry_after
                     )
-                
+
                 # Get response data
                 try:
                     data = await response.json()
@@ -196,13 +196,13 @@ class AlphaVantageClient:
                         f"Invalid JSON response: {e}. Response: {text[:200]}",
                         status_code=response.status
                     )
-                
+
                 # Handle API-level errors (AlphaVantage specific)
                 if isinstance(data, dict):
                     # Check for API limit messages
                     error_message = data.get("Error Message", "")
                     note = data.get("Note", "")
-                    
+
                     if "API call frequency" in error_message or "API call frequency" in note:
                         self.stats["rate_limits_hit"] += 1
                         self._adjust_throttling(False, duration_ms)
@@ -210,34 +210,34 @@ class AlphaVantageClient:
                             "AlphaVantage API call frequency limit exceeded",
                             retry_after=60
                         )
-                    
+
                     if error_message:
                         raise AlphaVantageError(f"API Error: {error_message}")
-                    
+
                     if note and "higher API call frequency" in note:
                         logger.warning(f"AlphaVantage API usage warning: {note}")
-                
+
                 # Handle HTTP errors
                 if response.status >= 400:
                     self.stats["requests_failed"] += 1
                     self._adjust_throttling(False, duration_ms)
                     error_msg = f"AlphaVantage API HTTP error {response.status}"
-                    
+
                     raise AlphaVantageError(
                         error_msg,
                         status_code=response.status,
                         response_data=data
                     )
-                
+
                 self.stats["requests_successful"] += 1
                 self._adjust_throttling(True, duration_ms)
                 logger.debug(f"Request successful in {duration_ms}ms")
-                
+
                 # Apply throttling delay after successful request
                 await asyncio.sleep(self.current_delay)
-                
+
                 return data
-                
+
         except (RateLimitError, AlphaVantageError):
             raise
         except Exception as e:
@@ -245,7 +245,7 @@ class AlphaVantageClient:
             self._adjust_throttling(False, 30000)  # Assume slow failure
             logger.error(f"Request to {url} failed: {e}")
             raise AlphaVantageError(f"Request failed: {str(e)}")
-    
+
     async def health_check(self) -> bool:
         """Perform health check by making a minimal API call"""
         try:
@@ -254,7 +254,7 @@ class AlphaVantageClient:
             return True
         except Exception as e:
             raise AlphaVantageError(f"Health check failed: {str(e)}")
-    
+
     async def fetch_technical_indicators(
         self,
         tickers: List[str],
@@ -264,24 +264,24 @@ class AlphaVantageClient:
     ) -> List[Dict[str, Any]]:
         """
         Fetch technical indicators for multiple tickers
-        
+
         Args:
             tickers: List of ticker symbols
             indicators: List of indicators to fetch (or None for defaults)
             interval: Time interval (daily, weekly, monthly)
             time_period: Time period for applicable indicators
-        
+
         Returns:
             List of indicator data dictionaries per ticker
         """
         if not tickers:
             return []
-        
+
         indicators_to_fetch = indicators or self.DEFAULT_INDICATORS
-        
+
         logger.info(f"Fetching {len(indicators_to_fetch)} indicators for {len(tickers)} tickers")
         results = []
-        
+
         # Process tickers sequentially with aggressive throttling
         for ticker in tickers:
             try:
@@ -301,9 +301,9 @@ class AlphaVantageClient:
                     "error": str(e),
                     "data": {}
                 })
-        
+
         return results
-    
+
     async def _fetch_ticker_indicators(
         self,
         ticker: str,
@@ -313,7 +313,7 @@ class AlphaVantageClient:
     ) -> Dict[str, Any]:
         """Fetch all indicators for a single ticker"""
         ticker_data = {}
-        
+
         for indicator in indicators:
             try:
                 indicator_data = await self.fetch_single_indicator(
@@ -323,9 +323,9 @@ class AlphaVantageClient:
             except Exception as e:
                 logger.error(f"Failed to fetch {indicator} for {ticker}: {e}")
                 ticker_data[indicator] = {"error": str(e)}
-        
+
         return ticker_data
-    
+
     async def fetch_single_indicator(
         self,
         ticker: str,
@@ -335,18 +335,18 @@ class AlphaVantageClient:
     ) -> Dict[str, Any]:
         """
         Fetch a single technical indicator for a ticker
-        
+
         Args:
             ticker: Stock symbol
             indicator: Technical indicator name
             interval: Time interval
             time_period: Time period for the indicator
-        
+
         Returns:
             Processed indicator data
         """
         params = {"interval": interval}
-        
+
         # Add time_period for indicators that support it
         if time_period and indicator in ["RSI", "SMA", "EMA", "WMA", "ADX", "CCI", "ROC"]:
             params["time_period"] = time_period
@@ -356,7 +356,7 @@ class AlphaVantageClient:
             params["time_period"] = time_period or 20
         elif indicator in ["ADX"]:
             params["time_period"] = time_period or 14
-        
+
         # Special parameters for specific indicators
         if indicator == "BBANDS":
             params.update({
@@ -379,13 +379,13 @@ class AlphaVantageClient:
                 "slowkmatype": 0,
                 "slowdmatype": 0
             })
-        
+
         try:
             data = await self._make_request(indicator, ticker, params)
-            
+
             # Process the response based on indicator type
             processed_data = self._process_indicator_response(indicator, data)
-            
+
             return {
                 "ticker": ticker,
                 "indicator": indicator,
@@ -395,42 +395,42 @@ class AlphaVantageClient:
                 "source": "alphavantage",
                 "ingested_at": datetime.utcnow().isoformat()
             }
-            
+
         except AlphaVantageError:
             raise
         except Exception as e:
             raise AlphaVantageError(f"Failed to fetch {indicator} for {ticker}: {str(e)}")
-    
+
     def _process_indicator_response(self, indicator: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Process AlphaVantage indicator response into standardized format"""
         if not isinstance(data, dict):
             raise AlphaVantageError(f"Invalid response format for {indicator}")
-        
+
         # Find the time series data key
         time_series_key = None
         for key in data.keys():
             if "Time Series" in key or indicator in key:
                 time_series_key = key
                 break
-        
+
         if not time_series_key:
             # No time series found, might be an error
             raise AlphaVantageError(f"No time series data found for {indicator}")
-        
+
         time_series = data[time_series_key]
         if not time_series:
             raise AlphaVantageError(f"Empty time series data for {indicator}")
-        
+
         # Get the most recent data point
         latest_date = max(time_series.keys())
         latest_data = time_series[latest_date]
-        
+
         # Process based on indicator type
         processed_data = {
             "date": latest_date,
             "raw_data": latest_data
         }
-        
+
         # Standardize field names
         if indicator == "RSI":
             processed_data["value"] = float(latest_data.get("RSI", 0))
@@ -458,25 +458,25 @@ class AlphaVantageClient:
         else:
             # Generic processing for other indicators
             processed_data["value"] = latest_data
-        
+
         return processed_data
-    
+
     def get_throttling_recommendations(self) -> Dict[str, Any]:
         """Get throttling recommendations based on current usage"""
         recent_requests = len([
-            ts for ts in self.request_timestamps 
+            ts for ts in self.request_timestamps
             if ts > datetime.utcnow() - timedelta(minutes=1)
         ])
-        
+
         daily_requests = len(self.request_timestamps)
-        
+
         recommendations = {
             "current_delay": self.current_delay,
             "recommended_batch_size": max(1, min(5, self.rate_limit_requests_per_minute - recent_requests)),
             "daily_quota_used": round(daily_requests / self.rate_limit_requests_per_day * 100, 1),
             "status": "healthy"
         }
-        
+
         if daily_requests > self.rate_limit_requests_per_day * 0.8:
             recommendations["status"] = "approaching_limit"
             recommendations["recommendation"] = "Reduce request frequency to stay within daily limit"
@@ -485,26 +485,26 @@ class AlphaVantageClient:
             recommendations["recommendation"] = "Wait before making more requests"
         else:
             recommendations["recommendation"] = "Normal operation"
-        
+
         return recommendations
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """Get client statistics"""
         avg_duration = 0
         if self.stats["requests_successful"] > 0:
             avg_duration = self.stats["total_duration_ms"] / self.stats["requests_successful"]
-        
+
         return {
             **self.stats,
             "average_duration_ms": round(avg_duration, 2),
             "success_rate": round(
-                self.stats["requests_successful"] / max(self.stats["requests_made"], 1) * 100, 
+                self.stats["requests_successful"] / max(self.stats["requests_made"], 1) * 100,
                 2
             ),
             "active_session": self.session is not None and not self.session.closed,
             "rate_limit_status": {
                 "recent_requests": len([
-                    ts for ts in self.request_timestamps 
+                    ts for ts in self.request_timestamps
                     if ts > datetime.utcnow() - timedelta(minutes=1)
                 ]),
                 "per_minute_limit": self.rate_limit_requests_per_minute,

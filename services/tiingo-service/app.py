@@ -61,6 +61,7 @@ def get_tiingo_client() -> TiingoClient:
 
 
 @app.on_event("startup")
+
 async def startup_event():
     """Initialize service on startup"""
     logger.info("Starting Tiingo service")
@@ -74,7 +75,8 @@ async def startup_event():
         # Don't raise here - let health check handle it
 
 
-@app.on_event("shutdown") 
+@app.on_event("shutdown")
+
 async def shutdown_event():
     """Cleanup on shutdown"""
     logger.info("Shutting down Tiingo service")
@@ -85,6 +87,7 @@ async def shutdown_event():
 
 
 @app.get("/health")
+
 async def health_check():
     """Health check endpoint"""
     try:
@@ -115,23 +118,24 @@ class FetchRequest(BaseModel):
 
 
 @app.post("/fetch", response_model=ServiceResponse)
+
 async def fetch_daily_prices(
     request: FetchRequest,
     client: TiingoClient = Depends(get_tiingo_client)
 ):
     """
     Fetch daily prices for given tickers
-    
+
     Args:
         request: Fetch request with tickers and parameters
         client: Tiingo client dependency
-    
+
     Returns:
         ServiceResponse with fetched data
     """
     start_time = datetime.utcnow()
     logger.info(f"Processing fetch request for {len(request.tickers)} tickers, job_id: {request.job_id}")
-    
+
     try:
         # Fetch data for all tickers
         results = await client.fetch_daily_prices(
@@ -139,21 +143,21 @@ async def fetch_daily_prices(
             start_date=request.start_date,
             end_date=request.end_date
         )
-        
+
         # Calculate metrics
         duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
         successful_tickers = [r['ticker'] for r in results if 'error' not in r]
         failed_tickers = [r['ticker'] for r in results if 'error' in r]
-        
+
         logger.info(
             f"Completed fetch request - Success: {len(successful_tickers)}, "
             f"Failed: {len(failed_tickers)}, Duration: {duration_ms}ms"
         )
-        
+
         # Log any failures
         if failed_tickers:
             logger.warning(f"Failed tickers: {failed_tickers}")
-        
+
         return ServiceResponse(
             status="ok",
             fetched=len(successful_tickers),
@@ -161,7 +165,7 @@ async def fetch_daily_prices(
             errors=[f"Failed: {ticker}" for ticker in failed_tickers] if failed_tickers else None,
             duration_ms=duration_ms
         )
-        
+
     except TiingoError as e:
         logger.error(f"Tiingo API error: {e}")
         raise HTTPException(
@@ -177,12 +181,13 @@ async def fetch_daily_prices(
 
 
 @app.get("/supported_tickers")
+
 async def get_supported_tickers(
     client: TiingoClient = Depends(get_tiingo_client)
 ):
     """
     Get list of supported tickers from Tiingo
-    
+
     Returns:
         List of supported ticker symbols
     """
@@ -209,17 +214,18 @@ async def get_supported_tickers(
 
 
 @app.get("/ticker/{ticker}/latest")
+
 async def get_latest_price(
     ticker: str,
     client: TiingoClient = Depends(get_tiingo_client)
 ):
     """
     Get latest daily price for a single ticker
-    
+
     Args:
         ticker: Stock ticker symbol
         client: Tiingo client dependency
-    
+
     Returns:
         Latest price data for the ticker
     """
@@ -229,26 +235,26 @@ async def get_latest_price(
             start_date=None,
             end_date=None
         )
-        
+
         if not data or len(data) == 0:
             raise HTTPException(
                 status_code=404,
                 detail=f"No data found for ticker {ticker}"
             )
-        
+
         ticker_data = data[0]
         if 'error' in ticker_data:
             raise HTTPException(
                 status_code=404,
                 detail=f"Error fetching data for {ticker}: {ticker_data['error']}"
             )
-        
+
         return {
             "status": "ok",
             "ticker": ticker.upper(),
             "data": ticker_data
         }
-        
+
     except HTTPException:
         raise
     except TiingoError as e:
@@ -266,20 +272,21 @@ async def get_latest_price(
 
 
 @app.get("/metrics")
+
 async def get_metrics():
     """
     Get service metrics
-    
+
     Returns:
         Service performance metrics
     """
-    
+
     if not tiingo_client:
         return {
             "status": "not_initialized",
             "client_stats": None
         }
-    
+
     return {
         "status": "ok",
         "client_stats": tiingo_client.get_stats(),
@@ -290,7 +297,7 @@ async def get_metrics():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(
         "app:app",

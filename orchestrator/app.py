@@ -26,16 +26,17 @@ handlers: Optional[SchedulerHandlers] = None
 
 
 @asynccontextmanager
+
 async def lifespan(app: FastAPI):
     """Application lifespan management"""
     global handlers
-    
+
     # Startup
     logger.info("Starting orchestrator service...")
     handlers = SchedulerHandlers()
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down orchestrator service...")
     if handlers:
@@ -72,6 +73,7 @@ def get_handlers() -> SchedulerHandlers:
 # ===========================================
 
 @app.get("/health")
+
 async def health_check():
     """Health check endpoint for load balancer"""
     return {
@@ -82,17 +84,18 @@ async def health_check():
 
 
 @app.get("/status")
+
 async def get_status(handlers: SchedulerHandlers = Depends(get_handlers)):
     """Get orchestrator status and statistics"""
     # Get handler stats
     handler_stats = handlers.get_stats()
-    
+
     # Health check all services
     service_health = await handlers.service_client.health_check_all()
-    
+
     # Calculate overall health
     all_healthy = all(service.get("healthy", False) for service in service_health.values())
-    
+
     return {
         "status": "healthy" if all_healthy else "degraded",
         "service": "orchestrator",
@@ -108,6 +111,7 @@ async def get_status(handlers: SchedulerHandlers = Depends(get_handlers)):
 # ===========================================
 
 @app.post("/tiingo/daily-prices", response_model=SchedulerResponse)
+
 async def handle_tiingo_daily_prices(
     request: SchedulerRequest,
     handlers: SchedulerHandlers = Depends(get_handlers)
@@ -117,10 +121,10 @@ async def handle_tiingo_daily_prices(
     Fetches EOD daily prices for entire watchlist
     """
     logger.info(f"Processing tiingo-daily-prices job: {request.job}")
-    
+
     try:
         result = await handlers.handle_tiingo_daily_prices(request)
-        
+
         return SchedulerResponse(
             status="ok" if result.get("status") == "success" else "error",
             data=result,
@@ -133,6 +137,7 @@ async def handle_tiingo_daily_prices(
 
 
 @app.post("/tiingo/daily-prices-indices", response_model=SchedulerResponse)
+
 async def handle_tiingo_daily_prices_indices(
     request: SchedulerRequest,
     handlers: SchedulerHandlers = Depends(get_handlers)
@@ -142,10 +147,10 @@ async def handle_tiingo_daily_prices_indices(
     Fetches EOD daily prices for market indices
     """
     logger.info(f"Processing tiingo-daily-prices-indices job: {request.job}")
-    
+
     try:
         result = await handlers.handle_tiingo_daily_prices_indices(request)
-        
+
         return SchedulerResponse(
             status="ok" if result.get("status") == "success" else "error",
             data=result,
@@ -162,6 +167,7 @@ async def handle_tiingo_daily_prices_indices(
 # ===========================================
 
 @app.post("/finnhub/quote-portfolio", response_model=SchedulerResponse)
+
 async def handle_finnhub_quote_portfolio(
     request: SchedulerRequest,
     handlers: SchedulerHandlers = Depends(get_handlers)
@@ -171,10 +177,10 @@ async def handle_finnhub_quote_portfolio(
     Fetches intraday quotes for active portfolio symbols
     """
     logger.info(f"Processing finnhub-quote-portfolio job: {request.job}")
-    
+
     try:
         result = await handlers.handle_finnhub_quote_portfolio(request)
-        
+
         return SchedulerResponse(
             status="ok" if result.get("status") == "success" else "error",
             data=result,
@@ -187,6 +193,7 @@ async def handle_finnhub_quote_portfolio(
 
 
 @app.post("/finnhub/quote-indices", response_model=SchedulerResponse)
+
 async def handle_finnhub_quote_indices(
     request: SchedulerRequest,
     handlers: SchedulerHandlers = Depends(get_handlers)
@@ -196,10 +203,10 @@ async def handle_finnhub_quote_indices(
     Fetches intraday quotes for market indices
     """
     logger.info(f"Processing finnhub-quote-indices job: {request.job}")
-    
+
     try:
         result = await handlers.handle_finnhub_quote_indices(request)
-        
+
         return SchedulerResponse(
             status="ok" if result.get("status") == "success" else "error",
             data=result,
@@ -212,6 +219,7 @@ async def handle_finnhub_quote_indices(
 
 
 @app.post("/finnhub/company-news-universe", response_model=SchedulerResponse)
+
 async def handle_finnhub_company_news_universe(
     request: SchedulerRequest,
     handlers: SchedulerHandlers = Depends(get_handlers)
@@ -221,10 +229,10 @@ async def handle_finnhub_company_news_universe(
     Fetches company news for entire watchlist
     """
     logger.info(f"Processing finnhub-company-news-universe job: {request.job}")
-    
+
     try:
         result = await handlers.handle_finnhub_company_news_universe(request)
-        
+
         return SchedulerResponse(
             status="ok" if result.get("status") == "success" else "error",
             data=result,
@@ -237,6 +245,7 @@ async def handle_finnhub_company_news_universe(
 
 
 @app.post("/finnhub/company-news-portfolio", response_model=SchedulerResponse)
+
 async def handle_finnhub_company_news_portfolio(
     request: SchedulerRequest,
     handlers: SchedulerHandlers = Depends(get_handlers)
@@ -246,10 +255,10 @@ async def handle_finnhub_company_news_portfolio(
     Fetches company news for active portfolio symbols
     """
     logger.info(f"Processing finnhub-company-news-portfolio job: {request.job}")
-    
+
     try:
         result = await handlers.handle_finnhub_company_news_portfolio(request)
-        
+
         return SchedulerResponse(
             status="ok" if result.get("status") == "success" else "error",
             data=result,
@@ -262,6 +271,7 @@ async def handle_finnhub_company_news_portfolio(
 
 
 @app.post("/finnhub/fundamentals-earnings", response_model=SchedulerResponse)
+
 async def handle_finnhub_fundamentals_earnings(
     request: SchedulerRequest,
     handlers: SchedulerHandlers = Depends(get_handlers)
@@ -271,10 +281,10 @@ async def handle_finnhub_fundamentals_earnings(
     Fetches fundamentals and earnings data for entire watchlist
     """
     logger.info(f"Processing finnhub-fundamentals-earnings job: {request.job}")
-    
+
     try:
         result = await handlers.handle_finnhub_fundamentals_earnings(request)
-        
+
         return SchedulerResponse(
             status="ok" if result.get("status") == "success" else "error",
             data=result,
@@ -291,6 +301,7 @@ async def handle_finnhub_fundamentals_earnings(
 # ===========================================
 
 @app.post("/polygon/news-universe", response_model=SchedulerResponse)
+
 async def handle_polygon_news_universe(
     request: SchedulerRequest,
     handlers: SchedulerHandlers = Depends(get_handlers)
@@ -300,10 +311,10 @@ async def handle_polygon_news_universe(
     Fetches company news for entire watchlist
     """
     logger.info(f"Processing polygon-news-universe job: {request.job}")
-    
+
     try:
         result = await handlers.handle_polygon_news_universe(request)
-        
+
         return SchedulerResponse(
             status="ok" if result.get("status") == "success" else "error",
             data=result,
@@ -316,6 +327,7 @@ async def handle_polygon_news_universe(
 
 
 @app.post("/polygon/news-portfolio", response_model=SchedulerResponse)
+
 async def handle_polygon_news_portfolio(
     request: SchedulerRequest,
     handlers: SchedulerHandlers = Depends(get_handlers)
@@ -325,10 +337,10 @@ async def handle_polygon_news_portfolio(
     Fetches company news for active portfolio symbols
     """
     logger.info(f"Processing polygon-news-portfolio job: {request.job}")
-    
+
     try:
         result = await handlers.handle_polygon_news_portfolio(request)
-        
+
         return SchedulerResponse(
             status="ok" if result.get("status") == "success" else "error",
             data=result,
@@ -341,6 +353,7 @@ async def handle_polygon_news_portfolio(
 
 
 @app.post("/polygon/news-market", response_model=SchedulerResponse)
+
 async def handle_polygon_news_market(
     request: SchedulerRequest,
     handlers: SchedulerHandlers = Depends(get_handlers)
@@ -350,10 +363,10 @@ async def handle_polygon_news_market(
     Fetches market-wide news stories
     """
     logger.info(f"Processing polygon-news-market job: {request.job}")
-    
+
     try:
         result = await handlers.handle_polygon_news_market(request)
-        
+
         return SchedulerResponse(
             status="ok" if result.get("status") == "success" else "error",
             data=result,
@@ -370,6 +383,7 @@ async def handle_polygon_news_market(
 # ===========================================
 
 @app.post("/alphavantage/technical-indicators", response_model=SchedulerResponse)
+
 async def handle_alphavantage_technical_indicators(
     request: SchedulerRequest,
     handlers: SchedulerHandlers = Depends(get_handlers)
@@ -379,10 +393,10 @@ async def handle_alphavantage_technical_indicators(
     Fetches technical indicators for entire watchlist
     """
     logger.info(f"Processing alpha-vantage-technical-indicators job: {request.job}")
-    
+
     try:
         result = await handlers.handle_alphavantage_technical_indicators(request)
-        
+
         return SchedulerResponse(
             status="ok" if result.get("status") == "success" else "error",
             data=result,
@@ -399,6 +413,7 @@ async def handle_alphavantage_technical_indicators(
 # ===========================================
 
 @app.post("/manual/trigger-job")
+
 async def manual_trigger_job(
     request: SchedulerRequest,
     handlers: SchedulerHandlers = Depends(get_handlers)
@@ -408,7 +423,7 @@ async def manual_trigger_job(
     Accepts any job name and routes to appropriate handler
     """
     logger.info(f"Manual trigger for job: {request.job}")
-    
+
     # Job routing map
     job_handlers = {
         "tiingo-daily-prices": handlers.handle_tiingo_daily_prices,
@@ -423,7 +438,7 @@ async def manual_trigger_job(
         "polygon-news-market": handlers.handle_polygon_news_market,
         "alpha-vantage-technical-indicators": handlers.handle_alphavantage_technical_indicators,
     }
-    
+
     handler_func = job_handlers.get(request.job)
     if not handler_func:
         available_jobs = list(job_handlers.keys())
@@ -431,10 +446,10 @@ async def manual_trigger_job(
             status_code=400,
             detail=f"Unknown job: {request.job}. Available jobs: {available_jobs}"
         )
-    
+
     try:
         result = await handler_func(request)
-        
+
         return SchedulerResponse(
             status="ok" if result.get("status") == "success" else "error",
             data=result,

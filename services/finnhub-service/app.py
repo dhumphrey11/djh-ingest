@@ -1,5 +1,5 @@
 """
-Finnhub Service FastAPI Application  
+Finnhub Service FastAPI Application
 Handles intraday quotes, company news, fundamentals, earnings, insider transactions, analyst ratings
 """
 
@@ -58,6 +58,7 @@ def get_finnhub_client() -> FinnhubClient:
 
 
 @app.on_event("startup")
+
 async def startup_event():
     """Initialize service on startup"""
     logger.info("Starting Finnhub service")
@@ -70,6 +71,7 @@ async def startup_event():
 
 
 @app.on_event("shutdown")
+
 async def shutdown_event():
     """Cleanup on shutdown"""
     logger.info("Shutting down Finnhub service")
@@ -80,6 +82,7 @@ async def shutdown_event():
 
 
 @app.get("/health")
+
 async def health_check():
     """Health check endpoint"""
     try:
@@ -100,6 +103,7 @@ async def health_check():
 
 
 # Request models
+
 class FetchRequest(BaseModel):
     """Base request model for fetch endpoints"""
     tickers: List[str]
@@ -126,6 +130,7 @@ class FundamentalsRequest(FetchRequest):
 
 # Route handlers
 @app.post("/fetch", response_model=ServiceResponse)
+
 async def fetch_quotes(
     request: QuoteRequest,
     client: FinnhubClient = Depends(get_finnhub_client)
@@ -141,6 +146,7 @@ async def fetch_quotes(
 
 
 @app.post("/fetch/news", response_model=ServiceResponse)
+
 async def fetch_company_news(
     request: NewsRequest,
     client: FinnhubClient = Depends(get_finnhub_client)
@@ -160,6 +166,7 @@ async def fetch_company_news(
 
 
 @app.post("/fetch/fundamentals", response_model=ServiceResponse)
+
 async def fetch_fundamentals(
     request: FundamentalsRequest,
     client: FinnhubClient = Depends(get_finnhub_client)
@@ -175,6 +182,7 @@ async def fetch_fundamentals(
 
 
 @app.post("/fetch/earnings", response_model=ServiceResponse)
+
 async def fetch_earnings(
     request: FetchRequest,
     client: FinnhubClient = Depends(get_finnhub_client)
@@ -190,6 +198,7 @@ async def fetch_earnings(
 
 
 @app.post("/fetch/insider-transactions", response_model=ServiceResponse)
+
 async def fetch_insider_transactions(
     request: FetchRequest,
     client: FinnhubClient = Depends(get_finnhub_client)
@@ -205,6 +214,7 @@ async def fetch_insider_transactions(
 
 
 @app.post("/fetch/analyst-ratings", response_model=ServiceResponse)
+
 async def fetch_analyst_ratings(
     request: FetchRequest,
     client: FinnhubClient = Depends(get_finnhub_client)
@@ -225,23 +235,23 @@ async def _execute_fetch(fetch_func, request: FetchRequest, data_type: str):
     """
     start_time = datetime.utcnow()
     logger.info(f"Processing {data_type} request for {len(request.tickers)} tickers, job_id: {request.job_id}")
-    
+
     try:
         results = await fetch_func(request.tickers)
-        
+
         # Calculate metrics
         duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
         successful_tickers = [r['ticker'] for r in results if 'error' not in r]
         failed_tickers = [r['ticker'] for r in results if 'error' in r]
-        
+
         logger.info(
             f"Completed {data_type} request - Success: {len(successful_tickers)}, "
             f"Failed: {len(failed_tickers)}, Duration: {duration_ms}ms"
         )
-        
+
         if failed_tickers:
             logger.warning(f"Failed tickers for {data_type}: {failed_tickers}")
-        
+
         return ServiceResponse(
             status="ok",
             fetched=len(successful_tickers),
@@ -249,7 +259,7 @@ async def _execute_fetch(fetch_func, request: FetchRequest, data_type: str):
             errors=[f"Failed: {ticker}" for ticker in failed_tickers] if failed_tickers else None,
             duration_ms=duration_ms
         )
-        
+
     except FinnhubError as e:
         logger.error(f"Finnhub API error: {e}")
         raise HTTPException(
@@ -266,6 +276,7 @@ async def _execute_fetch(fetch_func, request: FetchRequest, data_type: str):
 
 # Individual ticker endpoints for testing/debugging
 @app.get("/ticker/{ticker}/quote")
+
 async def get_quote(
     ticker: str,
     client: FinnhubClient = Depends(get_finnhub_client)
@@ -273,26 +284,26 @@ async def get_quote(
     """Get real-time quote for a single ticker"""
     try:
         data = await client.fetch_quotes([ticker.upper()])
-        
+
         if not data or len(data) == 0:
             raise HTTPException(
                 status_code=404,
                 detail=f"No quote data found for ticker {ticker}"
             )
-        
+
         ticker_data = data[0]
         if 'error' in ticker_data:
             raise HTTPException(
                 status_code=404,
                 detail=f"Error fetching quote for {ticker}: {ticker_data['error']}"
             )
-        
+
         return {
             "status": "ok",
             "ticker": ticker.upper(),
             "data": ticker_data
         }
-        
+
     except HTTPException:
         raise
     except FinnhubError as e:
@@ -310,6 +321,7 @@ async def get_quote(
 
 
 @app.get("/ticker/{ticker}/news")
+
 async def get_ticker_news(
     ticker: str,
     from_date: Optional[str] = Query(None, description="From date (YYYY-MM-DD)"),
@@ -323,27 +335,27 @@ async def get_ticker_news(
             from_date=from_date,
             to_date=to_date
         )
-        
+
         if not data or len(data) == 0:
             raise HTTPException(
                 status_code=404,
                 detail=f"No news data found for ticker {ticker}"
             )
-        
+
         ticker_data = data[0]
         if 'error' in ticker_data:
             raise HTTPException(
                 status_code=404,
                 detail=f"Error fetching news for {ticker}: {ticker_data['error']}"
             )
-        
+
         return {
             "status": "ok",
             "ticker": ticker.upper(),
             "data": ticker_data,
             "count": len(ticker_data.get('data', []))
         }
-        
+
     except HTTPException:
         raise
     except FinnhubError as e:
@@ -361,6 +373,7 @@ async def get_ticker_news(
 
 
 @app.get("/ticker/{ticker}/fundamentals")
+
 async def get_fundamentals(
     ticker: str,
     client: FinnhubClient = Depends(get_finnhub_client)
@@ -368,26 +381,26 @@ async def get_fundamentals(
     """Get basic fundamentals for a single ticker"""
     try:
         data = await client.fetch_fundamentals([ticker.upper()])
-        
+
         if not data or len(data) == 0:
             raise HTTPException(
                 status_code=404,
                 detail=f"No fundamentals data found for ticker {ticker}"
             )
-        
+
         ticker_data = data[0]
         if 'error' in ticker_data:
             raise HTTPException(
                 status_code=404,
                 detail=f"Error fetching fundamentals for {ticker}: {ticker_data['error']}"
             )
-        
+
         return {
             "status": "ok",
             "ticker": ticker.upper(),
             "data": ticker_data
         }
-        
+
     except HTTPException:
         raise
     except FinnhubError as e:
@@ -405,6 +418,7 @@ async def get_fundamentals(
 
 
 @app.get("/market/news")
+
 async def get_market_news(
     category: str = Query("general", description="News category"),
     client: FinnhubClient = Depends(get_finnhub_client)
@@ -412,14 +426,14 @@ async def get_market_news(
     """Get general market news"""
     try:
         data = await client.fetch_market_news(category=category)
-        
+
         return {
             "status": "ok",
             "category": category,
             "data": data,
             "count": len(data)
         }
-        
+
     except FinnhubError as e:
         logger.error(f"Finnhub API error for market news: {e}")
         raise HTTPException(
@@ -435,15 +449,16 @@ async def get_market_news(
 
 
 @app.get("/metrics")
+
 async def get_metrics():
     """Get service metrics"""
-    
+
     if not finnhub_client:
         return {
             "status": "not_initialized",
             "client_stats": None
         }
-    
+
     return {
         "status": "ok",
         "client_stats": finnhub_client.get_stats(),
@@ -454,7 +469,7 @@ async def get_metrics():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(
         "app:app",

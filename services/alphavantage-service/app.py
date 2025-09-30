@@ -58,6 +58,7 @@ def get_alphavantage_client() -> AlphaVantageClient:
 
 
 @app.on_event("startup")
+
 async def startup_event():
     """Initialize service on startup"""
     logger.info("Starting AlphaVantage service")
@@ -70,6 +71,7 @@ async def startup_event():
 
 
 @app.on_event("shutdown")
+
 async def shutdown_event():
     """Cleanup on shutdown"""
     logger.info("Shutting down AlphaVantage service")
@@ -80,6 +82,7 @@ async def shutdown_event():
 
 
 @app.get("/health")
+
 async def health_check():
     """Health check endpoint"""
     try:
@@ -100,6 +103,7 @@ async def health_check():
 
 
 # Request models
+
 class FetchRequest(BaseModel):
     """Base request model for fetch endpoints"""
     tickers: List[str]
@@ -117,6 +121,7 @@ class TechnicalIndicatorRequest(FetchRequest):
 
 # Route handlers
 @app.post("/fetch", response_model=ServiceResponse)
+
 async def fetch_technical_indicators(
     request: TechnicalIndicatorRequest,
     client: AlphaVantageClient = Depends(get_alphavantage_client)
@@ -140,23 +145,23 @@ async def _execute_fetch(fetch_func, request: FetchRequest, data_type: str):
     """Common execution pattern for fetch operations"""
     start_time = datetime.utcnow()
     logger.info(f"Processing {data_type} request for {len(request.tickers)} tickers, job_id: {request.job_id}")
-    
+
     try:
         results = await fetch_func(request.tickers)
-        
+
         # Calculate metrics
         duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
         successful_tickers = [r['ticker'] for r in results if 'error' not in r]
         failed_tickers = [r['ticker'] for r in results if 'error' in r]
-        
+
         logger.info(
             f"Completed {data_type} request - Success: {len(successful_tickers)}, "
             f"Failed: {len(failed_tickers)}, Duration: {duration_ms}ms"
         )
-        
+
         if failed_tickers:
             logger.warning(f"Failed tickers for {data_type}: {failed_tickers}")
-        
+
         return ServiceResponse(
             status="ok",
             fetched=len(successful_tickers),
@@ -164,7 +169,7 @@ async def _execute_fetch(fetch_func, request: FetchRequest, data_type: str):
             errors=[f"Failed: {ticker}" for ticker in failed_tickers] if failed_tickers else None,
             duration_ms=duration_ms
         )
-        
+
     except AlphaVantageError as e:
         logger.error(f"AlphaVantage API error: {e}")
         raise HTTPException(
@@ -181,6 +186,7 @@ async def _execute_fetch(fetch_func, request: FetchRequest, data_type: str):
 
 # Individual ticker endpoints for testing/debugging
 @app.get("/ticker/{ticker}/indicators")
+
 async def get_ticker_indicators(
     ticker: str,
     indicators: Optional[str] = Query(None, description="Comma-separated list of indicators (RSI,SMA,MACD)"),
@@ -191,34 +197,34 @@ async def get_ticker_indicators(
     """Get technical indicators for a single ticker"""
     try:
         indicator_list = indicators.split(',') if indicators else None
-        
+
         data = await client.fetch_technical_indicators(
             tickers=[ticker.upper()],
             indicators=indicator_list,
             interval=interval,
             time_period=time_period
         )
-        
+
         if not data or len(data) == 0:
             raise HTTPException(
                 status_code=404,
                 detail=f"No indicator data found for ticker {ticker}"
             )
-        
+
         ticker_data = data[0]
         if 'error' in ticker_data:
             raise HTTPException(
                 status_code=404,
                 detail=f"Error fetching indicators for {ticker}: {ticker_data['error']}"
             )
-        
+
         return {
             "status": "ok",
             "ticker": ticker.upper(),
             "data": ticker_data.get('data', {}),
             "indicators": list(ticker_data.get('data', {}).keys())
         }
-        
+
     except HTTPException:
         raise
     except AlphaVantageError as e:
@@ -236,6 +242,7 @@ async def get_ticker_indicators(
 
 
 @app.get("/ticker/{ticker}/indicator/{indicator}")
+
 async def get_single_indicator(
     ticker: str,
     indicator: str,
@@ -251,14 +258,14 @@ async def get_single_indicator(
             interval=interval,
             time_period=time_period
         )
-        
+
         return {
             "status": "ok",
             "ticker": ticker.upper(),
             "indicator": indicator.upper(),
             "data": data
         }
-        
+
     except AlphaVantageError as e:
         logger.error(f"AlphaVantage API error for {ticker}/{indicator}: {e}")
         raise HTTPException(
@@ -274,6 +281,7 @@ async def get_single_indicator(
 
 
 @app.get("/supported-indicators")
+
 async def get_supported_indicators():
     """Get list of supported technical indicators"""
     return {
@@ -295,12 +303,13 @@ async def get_supported_indicators():
 
 
 @app.get("/rate-limit/status")
+
 async def get_rate_limit_status(
     client: AlphaVantageClient = Depends(get_alphavantage_client)
 ):
     """Get current rate limit status"""
     stats = client.get_stats()
-    
+
     return {
         "status": "ok",
         "rate_limit": stats.get("rate_limit_status", {}),
@@ -308,7 +317,7 @@ async def get_rate_limit_status(
             "requests_last_minute": stats["rate_limit_status"]["recent_requests"],
             "per_minute_limit": stats["rate_limit_status"]["per_minute_limit"],
             "utilization_percent": round(
-                stats["rate_limit_status"]["recent_requests"] / 
+                stats["rate_limit_status"]["recent_requests"] /
                 max(stats["rate_limit_status"]["per_minute_limit"], 1) * 100, 2
             )
         },
@@ -317,15 +326,16 @@ async def get_rate_limit_status(
 
 
 @app.get("/metrics")
+
 async def get_metrics():
     """Get service metrics"""
-    
+
     if not alphavantage_client:
         return {
             "status": "not_initialized",
             "client_stats": None
         }
-    
+
     return {
         "status": "ok",
         "client_stats": alphavantage_client.get_stats(),
@@ -336,7 +346,7 @@ async def get_metrics():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(
         "app:app",

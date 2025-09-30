@@ -23,7 +23,7 @@ class SchedulerHandlers:
     Handlers for Cloud Scheduler requests
     Each method corresponds to a scheduled job endpoint
     """
-    
+
     def __init__(self):
         self.service_client = ServiceClient()
         self.stats = {
@@ -32,15 +32,15 @@ class SchedulerHandlers:
             "jobs_failed": 0,
             "last_job_time": None
         }
-    
+
     async def close(self):
         """Close service client connections"""
         await self.service_client.close()
-    
+
     # ===========================================
     # TIINGO HANDLERS
     # ===========================================
-    
+
     async def handle_tiingo_daily_prices(self, request: SchedulerRequest) -> Dict[str, Any]:
         """
         Handler for tiingo-daily-prices job
@@ -52,10 +52,10 @@ class SchedulerHandlers:
             handler_func=self._process_tiingo_daily_prices,
             expected_scope=ScopeType.ENTIRE_WATCHLIST
         )
-    
+
     async def handle_tiingo_daily_prices_indices(self, request: SchedulerRequest) -> Dict[str, Any]:
         """
-        Handler for tiingo-daily-prices-indices job  
+        Handler for tiingo-daily-prices-indices job
         Fetches EOD prices for market indices
         """
         return await self._execute_job(
@@ -64,7 +64,7 @@ class SchedulerHandlers:
             handler_func=self._process_tiingo_daily_prices,
             expected_scope=ScopeType.INDICES
         )
-    
+
     async def _process_tiingo_daily_prices(
         self,
         tickers: List[str],
@@ -72,14 +72,14 @@ class SchedulerHandlers:
     ) -> Dict[str, Any]:
         """Process Tiingo daily prices request"""
         logger.info(f"Processing Tiingo daily prices for {len(tickers)} symbols")
-        
+
         # Call Tiingo service
         response = await self.service_client.fetch_tiingo_daily_prices(
             tickers=tickers,
             job_id=request.job,
             run_time=request.run_time or datetime.utcnow()
         )
-        
+
         # Log raw response
         fs_logger = await get_firestore_logger()
         await fs_logger.log_raw(
@@ -92,7 +92,7 @@ class SchedulerHandlers:
             latency_ms=0,  # Service client handles timing
             job_id=request.job
         )
-        
+
         # Process and store data
         if response.get("status") == "ok" and response.get("data"):
             processed_count = await self._store_daily_prices_data(response["data"])
@@ -104,11 +104,11 @@ class SchedulerHandlers:
             }
         else:
             raise Exception(f"Tiingo service error: {response}")
-    
+
     # ===========================================
     # FINNHUB HANDLERS
     # ===========================================
-    
+
     async def handle_finnhub_quote_portfolio(self, request: SchedulerRequest) -> Dict[str, Any]:
         """Handler for finnhub-quote-portfolio job"""
         return await self._execute_job(
@@ -117,7 +117,7 @@ class SchedulerHandlers:
             handler_func=self._process_finnhub_quotes,
             expected_scope=ScopeType.ACTIVE_SYMBOLS
         )
-    
+
     async def handle_finnhub_quote_indices(self, request: SchedulerRequest) -> Dict[str, Any]:
         """Handler for finnhub-quote-indices job"""
         return await self._execute_job(
@@ -126,7 +126,7 @@ class SchedulerHandlers:
             handler_func=self._process_finnhub_quotes,
             expected_scope=ScopeType.INDICES
         )
-    
+
     async def handle_finnhub_company_news_universe(self, request: SchedulerRequest) -> Dict[str, Any]:
         """Handler for finnhub-company-news-universe job"""
         return await self._execute_job(
@@ -135,7 +135,7 @@ class SchedulerHandlers:
             handler_func=self._process_finnhub_company_news,
             expected_scope=ScopeType.ENTIRE_WATCHLIST
         )
-    
+
     async def handle_finnhub_company_news_portfolio(self, request: SchedulerRequest) -> Dict[str, Any]:
         """Handler for finnhub-company-news-portfolio job"""
         return await self._execute_job(
@@ -144,7 +144,7 @@ class SchedulerHandlers:
             handler_func=self._process_finnhub_company_news,
             expected_scope=ScopeType.ACTIVE_SYMBOLS
         )
-    
+
     async def handle_finnhub_fundamentals_earnings(self, request: SchedulerRequest) -> Dict[str, Any]:
         """Handler for finnhub-fundamentals-earnings job"""
         return await self._execute_job(
@@ -153,21 +153,21 @@ class SchedulerHandlers:
             handler_func=self._process_finnhub_fundamentals,
             expected_scope=ScopeType.ENTIRE_WATCHLIST
         )
-    
+
     async def _process_finnhub_quotes(
         self,
-        tickers: List[str], 
+        tickers: List[str],
         request: SchedulerRequest
     ) -> Dict[str, Any]:
         """Process Finnhub quotes request"""
         logger.info(f"Processing Finnhub quotes for {len(tickers)} symbols")
-        
+
         response = await self.service_client.fetch_finnhub_quotes(
             tickers=tickers,
             job_id=request.job,
             run_time=request.run_time or datetime.utcnow()
         )
-        
+
         # Log raw response
         fs_logger = await get_firestore_logger()
         await fs_logger.log_raw(
@@ -180,7 +180,7 @@ class SchedulerHandlers:
             latency_ms=0,
             job_id=request.job
         )
-        
+
         # Process and store intraday quotes
         if response.get("status") == "ok" and response.get("data"):
             processed_count = await self._store_intraday_quotes_data(response["data"])
@@ -192,7 +192,7 @@ class SchedulerHandlers:
             }
         else:
             raise Exception(f"Finnhub quotes service error: {response}")
-    
+
     async def _process_finnhub_company_news(
         self,
         tickers: List[str],
@@ -200,13 +200,13 @@ class SchedulerHandlers:
     ) -> Dict[str, Any]:
         """Process Finnhub company news request"""
         logger.info(f"Processing Finnhub company news for {len(tickers)} symbols")
-        
+
         response = await self.service_client.fetch_finnhub_company_news(
             tickers=tickers,
             job_id=request.job,
             run_time=request.run_time or datetime.utcnow()
         )
-        
+
         # Log raw response
         fs_logger = await get_firestore_logger()
         await fs_logger.log_raw(
@@ -219,7 +219,7 @@ class SchedulerHandlers:
             latency_ms=0,
             job_id=request.job
         )
-        
+
         # Process and store news articles
         if response.get("status") == "ok" and response.get("data"):
             processed_count = await self._store_news_data(response["data"])
@@ -231,7 +231,7 @@ class SchedulerHandlers:
             }
         else:
             raise Exception(f"Finnhub news service error: {response}")
-    
+
     async def _process_finnhub_fundamentals(
         self,
         tickers: List[str],
@@ -239,20 +239,20 @@ class SchedulerHandlers:
     ) -> Dict[str, Any]:
         """Process Finnhub fundamentals request"""
         logger.info(f"Processing Finnhub fundamentals for {len(tickers)} symbols")
-        
+
         # Fetch both fundamentals and earnings
         fundamentals_response = await self.service_client.fetch_finnhub_fundamentals(
             tickers=tickers,
             job_id=request.job,
             run_time=request.run_time or datetime.utcnow()
         )
-        
+
         earnings_response = await self.service_client.fetch_finnhub_earnings(
             tickers=tickers,
             job_id=request.job,
             run_time=request.run_time or datetime.utcnow()
         )
-        
+
         # Log raw responses
         fs_logger = await get_firestore_logger()
         await fs_logger.log_raw(
@@ -265,7 +265,7 @@ class SchedulerHandlers:
             latency_ms=0,
             job_id=request.job
         )
-        
+
         await fs_logger.log_raw(
             source="finnhub",
             api_name="earnings",
@@ -276,17 +276,17 @@ class SchedulerHandlers:
             latency_ms=0,
             job_id=request.job
         )
-        
+
         # Process and store data
         fundamentals_count = 0
         earnings_count = 0
-        
+
         if fundamentals_response.get("status") == "ok" and fundamentals_response.get("data"):
             fundamentals_count = await self._store_fundamentals_data(fundamentals_response["data"])
-        
+
         if earnings_response.get("status") == "ok" and earnings_response.get("data"):
             earnings_count = await self._store_earnings_data(earnings_response["data"])
-        
+
         return {
             "status": "success",
             "tickers_processed": len(tickers),
@@ -294,11 +294,11 @@ class SchedulerHandlers:
             "earnings_stored": earnings_count,
             "source": "finnhub"
         }
-    
+
     # ===========================================
     # POLYGON HANDLERS
     # ===========================================
-    
+
     async def handle_polygon_news_universe(self, request: SchedulerRequest) -> Dict[str, Any]:
         """Handler for polygon-news-universe job"""
         return await self._execute_job(
@@ -307,7 +307,7 @@ class SchedulerHandlers:
             handler_func=self._process_polygon_company_news,
             expected_scope=ScopeType.ENTIRE_WATCHLIST
         )
-    
+
     async def handle_polygon_news_portfolio(self, request: SchedulerRequest) -> Dict[str, Any]:
         """Handler for polygon-news-portfolio job"""
         return await self._execute_job(
@@ -316,7 +316,7 @@ class SchedulerHandlers:
             handler_func=self._process_polygon_company_news,
             expected_scope=ScopeType.ACTIVE_SYMBOLS
         )
-    
+
     async def handle_polygon_news_market(self, request: SchedulerRequest) -> Dict[str, Any]:
         """Handler for polygon-news-market job"""
         return await self._execute_job(
@@ -325,7 +325,7 @@ class SchedulerHandlers:
             handler_func=self._process_polygon_market_news,
             expected_scope=ScopeType.NONE
         )
-    
+
     async def _process_polygon_company_news(
         self,
         tickers: List[str],
@@ -333,13 +333,13 @@ class SchedulerHandlers:
     ) -> Dict[str, Any]:
         """Process Polygon company news request"""
         logger.info(f"Processing Polygon company news for {len(tickers)} symbols")
-        
+
         response = await self.service_client.fetch_polygon_company_news(
             tickers=tickers,
             job_id=request.job,
             run_time=request.run_time or datetime.utcnow()
         )
-        
+
         # Log raw response
         fs_logger = await get_firestore_logger()
         await fs_logger.log_raw(
@@ -352,7 +352,7 @@ class SchedulerHandlers:
             latency_ms=0,
             job_id=request.job
         )
-        
+
         # Process and store news articles
         if response.get("status") == "ok" and response.get("data"):
             processed_count = await self._store_news_data(response["data"])
@@ -364,7 +364,7 @@ class SchedulerHandlers:
             }
         else:
             raise Exception(f"Polygon company news service error: {response}")
-    
+
     async def _process_polygon_market_news(
         self,
         tickers: List[str],  # Will be empty for market news
@@ -372,12 +372,12 @@ class SchedulerHandlers:
     ) -> Dict[str, Any]:
         """Process Polygon market news request"""
         logger.info("Processing Polygon market news")
-        
+
         response = await self.service_client.fetch_polygon_market_news(
             job_id=request.job,
             run_time=request.run_time or datetime.utcnow()
         )
-        
+
         # Log raw response
         fs_logger = await get_firestore_logger()
         await fs_logger.log_raw(
@@ -390,7 +390,7 @@ class SchedulerHandlers:
             latency_ms=0,
             job_id=request.job
         )
-        
+
         # Process and store market news articles
         if response.get("status") == "ok" and response.get("data"):
             processed_count = await self._store_market_news_data(response["data"])
@@ -401,11 +401,11 @@ class SchedulerHandlers:
             }
         else:
             raise Exception(f"Polygon market news service error: {response}")
-    
+
     # ===========================================
     # ALPHAVANTAGE HANDLERS
     # ===========================================
-    
+
     async def handle_alphavantage_technical_indicators(self, request: SchedulerRequest) -> Dict[str, Any]:
         """Handler for alpha-vantage-technical-indicators job"""
         return await self._execute_job(
@@ -414,7 +414,7 @@ class SchedulerHandlers:
             handler_func=self._process_alphavantage_indicators,
             expected_scope=ScopeType.ENTIRE_WATCHLIST
         )
-    
+
     async def _process_alphavantage_indicators(
         self,
         tickers: List[str],
@@ -422,13 +422,13 @@ class SchedulerHandlers:
     ) -> Dict[str, Any]:
         """Process AlphaVantage technical indicators request"""
         logger.info(f"Processing AlphaVantage technical indicators for {len(tickers)} symbols")
-        
+
         response = await self.service_client.fetch_alphavantage_technical_indicators(
             tickers=tickers,
             job_id=request.job,
             run_time=request.run_time or datetime.utcnow()
         )
-        
+
         # Log raw response
         fs_logger = await get_firestore_logger()
         await fs_logger.log_raw(
@@ -441,7 +441,7 @@ class SchedulerHandlers:
             latency_ms=0,
             job_id=request.job
         )
-        
+
         # Process and store technical indicators
         if response.get("status") == "ok" and response.get("data"):
             processed_count = await self._store_technical_indicators_data(response["data"])
@@ -453,11 +453,11 @@ class SchedulerHandlers:
             }
         else:
             raise Exception(f"AlphaVantage service error: {response}")
-    
+
     # ===========================================
     # COMMON EXECUTION LOGIC
     # ===========================================
-    
+
     async def _execute_job(
         self,
         job_name: str,
@@ -469,18 +469,18 @@ class SchedulerHandlers:
         start_time = datetime.utcnow()
         self.stats["jobs_processed"] += 1
         self.stats["last_job_time"] = start_time.isoformat()
-        
+
         try:
             # Validate scope
             if request.scope != expected_scope:
                 logger.warning(f"Scope mismatch for {job_name}: expected {expected_scope}, got {request.scope}")
-            
+
             # Get tickers based on scope
             if request.tickers:
                 tickers = request.tickers
             else:
                 tickers = await self._get_tickers_for_scope(request.scope)
-            
+
             if not tickers:
                 logger.warning(f"No tickers found for scope {request.scope}")
                 return {
@@ -488,26 +488,26 @@ class SchedulerHandlers:
                     "message": "No tickers to process",
                     "tickers_processed": 0
                 }
-            
+
             # Execute the specific handler
             result = await handler_func(tickers, request)
-            
+
             # Calculate duration
             duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
             result["duration_ms"] = duration_ms
             result["job_name"] = job_name
-            
+
             self.stats["jobs_successful"] += 1
-            
+
             logger.info(f"Job {job_name} completed successfully in {duration_ms}ms")
             return result
-            
+
         except Exception as e:
             self.stats["jobs_failed"] += 1
             duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
-            
+
             logger.error(f"Job {job_name} failed after {duration_ms}ms: {e}")
-            
+
             # Return error response
             return {
                 "status": "error",
@@ -515,11 +515,11 @@ class SchedulerHandlers:
                 "job_name": job_name,
                 "duration_ms": duration_ms
             }
-    
+
     async def _get_tickers_for_scope(self, scope: ScopeType) -> List[str]:
         """Get ticker symbols based on scope"""
         fs_logger = await get_firestore_logger()
-        
+
         if scope == ScopeType.ENTIRE_WATCHLIST:
             return await fs_logger.get_watchlist_symbols()
         elif scope == ScopeType.ACTIVE_SYMBOLS:
@@ -531,37 +531,37 @@ class SchedulerHandlers:
         else:
             logger.warning(f"Unknown scope: {scope}")
             return []
-    
+
     # ===========================================
     # DATA STORAGE HELPERS
     # ===========================================
-    
+
     async def _store_daily_prices_data(self, data: List[Dict[str, Any]]) -> int:
         """Store daily prices data in Firestore"""
         fs_logger = await get_firestore_logger()
-        
+
         # Flatten ticker data into individual records
         records = []
         for ticker_data in data:
             if "error" in ticker_data:
                 continue
-            
+
             ticker_records = ticker_data.get("data", [])
             for record in ticker_records:
                 if isinstance(record, dict):
                     records.append(record)
-        
+
         return await fs_logger.write_daily_prices_batch(records)
-    
+
     async def _store_intraday_quotes_data(self, data: List[Dict[str, Any]]) -> int:
         """Store intraday quotes data in Firestore"""
         fs_logger = await get_firestore_logger()
-        
+
         records = []
         for ticker_data in data:
             if "error" in ticker_data:
                 continue
-            
+
             quote_data = ticker_data.get("data", {})
             if quote_data:
                 ticker = quote_data.get("ticker")
@@ -574,40 +574,40 @@ class SchedulerHandlers:
                         "data": quote_data,
                         "merge": False
                     })
-        
+
         return await fs_logger.write_batch(records)
-    
+
     async def _store_news_data(self, data: List[Dict[str, Any]]) -> int:
         """Store news articles data in Firestore"""
         fs_logger = await get_firestore_logger()
-        
+
         # Flatten ticker news data
         articles = []
         for ticker_data in data:
             if "error" in ticker_data:
                 continue
-            
+
             ticker_articles = ticker_data.get("data", [])
             for article in ticker_articles:
                 if isinstance(article, dict):
                     articles.append(article)
-        
+
         return await fs_logger.write_news_batch(articles)
-    
+
     async def _store_market_news_data(self, data: List[Dict[str, Any]]) -> int:
         """Store market news data in Firestore"""
         fs_logger = await get_firestore_logger()
         return await fs_logger.write_news_batch(data)
-    
+
     async def _store_fundamentals_data(self, data: List[Dict[str, Any]]) -> int:
         """Store fundamentals data in Firestore"""
         fs_logger = await get_firestore_logger()
-        
+
         records = []
         for ticker_data in data:
             if "error" in ticker_data:
                 continue
-            
+
             fundamental_data = ticker_data.get("data", {})
             if fundamental_data:
                 ticker = fundamental_data.get("ticker")
@@ -620,18 +620,18 @@ class SchedulerHandlers:
                         "data": fundamental_data,
                         "merge": True
                     })
-        
+
         return await fs_logger.write_batch(records)
-    
+
     async def _store_earnings_data(self, data: List[Dict[str, Any]]) -> int:
         """Store earnings data in Firestore"""
         fs_logger = await get_firestore_logger()
-        
+
         records = []
         for ticker_data in data:
             if "error" in ticker_data:
                 continue
-            
+
             earnings_list = ticker_data.get("data", [])
             for earning in earnings_list:
                 if isinstance(earning, dict):
@@ -645,26 +645,26 @@ class SchedulerHandlers:
                             "data": earning,
                             "merge": True
                         })
-        
+
         return await fs_logger.write_batch(records)
-    
+
     async def _store_technical_indicators_data(self, data: List[Dict[str, Any]]) -> int:
         """Store technical indicators data in Firestore"""
         fs_logger = await get_firestore_logger()
-        
+
         records = []
         for ticker_data in data:
             if "error" in ticker_data:
                 continue
-            
+
             ticker = ticker_data.get("ticker")
             indicators = ticker_data.get("data", {})
-            
+
             for indicator_name, indicator_data in indicators.items():
                 if isinstance(indicator_data, dict) and "error" not in indicator_data:
                     # Extract date from indicator data
                     date = indicator_data.get("date", datetime.utcnow().strftime("%Y-%m-%d"))
-                    
+
                     # Create flattened record
                     record = {
                         "ticker": ticker,
@@ -675,11 +675,11 @@ class SchedulerHandlers:
                         "source": "alphavantage",
                         "ingested_at": datetime.utcnow().isoformat()
                     }
-                    
+
                     records.append(record)
-        
+
         return await fs_logger.write_technical_indicators_batch(records)
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """Get handler statistics"""
         return self.stats

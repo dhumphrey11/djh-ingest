@@ -11,7 +11,7 @@ from enum import Enum
 class ScopeType(str, Enum):
     """Defines the scope of data ingestion"""
     ENTIRE_WATCHLIST = "entire_watchlist"
-    ACTIVE_SYMBOLS = "active_symbols"  
+    ACTIVE_SYMBOLS = "active_symbols"
     INDICES = "indices"
     NONE = "none"
 
@@ -83,6 +83,7 @@ class RawLogEntry(BaseModel):
 
 
 # Tiingo Models
+
 class TiingoDailyPrice(BaseModel):
     """Tiingo daily price data"""
     ticker: str
@@ -103,6 +104,7 @@ class TiingoDailyPrice(BaseModel):
 
 
 # Finnhub Models
+
 class FinnhubQuote(BaseModel):
     """Finnhub real-time quote"""
     ticker: str
@@ -187,6 +189,7 @@ class FinnhubAnalystRating(BaseModel):
 
 
 # Polygon Models
+
 class PolygonNews(BaseModel):
     """Polygon news article"""
     ticker: Optional[str] = None
@@ -204,6 +207,7 @@ class PolygonNews(BaseModel):
 
 
 # AlphaVantage Models
+
 class TechnicalIndicator(BaseModel):
     """Generic technical indicator"""
     ticker: str
@@ -215,6 +219,7 @@ class TechnicalIndicator(BaseModel):
 
 
 # Index/Economic Models
+
 class MarketIndex(BaseModel):
     """Market index data"""
     symbol: str
@@ -240,6 +245,7 @@ class EconomicIndicator(BaseModel):
 
 
 # Signal Models (for frontend API)
+
 class TechnicalSignal(BaseModel):
     """Combined technical indicator signal"""
     ticker: str
